@@ -1,0 +1,11 @@
+# binaries
+/world
+/bin/
+*.exe
+# go
+*.test
+*.out
+/vendor/
+# editor/os
+.DS_Store
+*.swp
