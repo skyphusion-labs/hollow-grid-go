@@ -1,33 +1,66 @@
-# Build plan
+# Build plan & status
 
 Porting the Hollow Grid world framework to Go, against the upstream
-`docs/protocol.md` contract. Federation is additive and last; a standalone world
-comes first (protocol.md s4: "A world is fully playable standalone").
+`docs/protocol.md`. The scoreboard is the upstream `smoke.mjs` (134 checks at the
+time of writing): **build the port to pass it, phase by phase.** Currently
+**56 / 134**. The unpassed checks are almost entirely the federation engine and
+multiplayer (deferred — see the end).
 
-## Phase 0 - transport foundation (THIS COMMIT)
-- [x] HTTP server, graceful shutdown
-- [x] `/ws` WebSocket, plain UTF-8 text, CRLF lines
-- [x] login flow: banner -> name prompt -> (race menu TODO) -> play
-- [x] `@event` channel framing (`@event <name> <json>`)
-- [x] `room.info` + `char.vitals` emission
-- [x] `/health` + `/health/deep` probes
-- [x] tiny 2-room world graph + `look` + movement
+## Done
 
-## Phase 1 - the world model
-- [ ] race menu for new characters (federated opaque race label)
-- [ ] real room graph + content loading (worlds/*.jsonc compatible)
-- [ ] mobs, items, inventory; `char.affects`, `char.equipment`, `room.actions`
-- [ ] local persistence (SQLite via modernc.org/sqlite, or bolt)
+**Phase 0 — transport foundation**
+- [x] HTTP server, graceful shutdown, `/health` + `/health/deep`
+- [x] `/ws` WebSocket, UTF-8 text, CRLF lines
+- [x] login flow: banner → name → race menu → play; name-based identity
+- [x] the `@event` channel framing
 
-## Phase 2 - the living world (tick loop)
-- [ ] combat (`combat.start/round/end`), regen/poison, respawns, death
-- [ ] day/night + weather (`world.state`), wandering ghost transmissions
+**Phase 1 — the world**
+- [x] the 7 canonical races, with Cinder Front stance + signature abilities (Requisition + cooldown, the heals, Forage)
+- [x] the canonical opening map (the Cracked Nexus, tavern, market, holding pit, workshop, roof, tunnels) + the wastes (Ash Flats, Scorch Road, Refugee Waystation)
+- [x] items / inventory / equipment (`wield`/`remove` → `char.equipment`), the starter shiv, `title`
+- [x] mobs (`room.info.mobs`), `consider`, `look <mob>`
+- [x] **async combat** — `attack` → `combat.start/round/end` on a tick, death → respawn
+- [x] the **living-world heartbeat** — `world.state` clock (pure function of elapsed time), `rest` + regen
+- [x] **the Cinder Front moral arc** — `join` → `faction:front`; the ash-sworn (kapo) brand for hunted races; `room.actions` moral choices with `valence` (`grave` for a hunted join); `defy`; the honest market refuses collaborators
+- [x] the Refugee Waystation — `talk` reacts to standing, `treat` (medic gated by the collective tide, graceful without a hub)
+- [x] the tinker **economy** — `list`/`buy` gear for gold (20 starting gold)
+- [x] the **holding-pit rescue** — beat the warden, `free` the captive → `grid.rescued` (named, +morality, unfarmable)
+- [x] **dreams** — `sleep` → `char.dream`, a mirror of your record
+- [x] **persistence** — the canonical `CharSheet` via `CharStore`/`FileStore`; resume on a known name
+- [x] **Docker** (multi-stage → distroless) + **Jenkins CI/CD** (lint → test → image → conformance → deploy)
 
-## Phase 3 - federation (GridHubApi client; additive, non-blocking)
-- [ ] HTTP client for the GridHubApi (record/recent, tide, gridcast, char load/commit, register/listWorlds)
-- [ ] `/grid-event` inbound endpoint for hub fan-out (gridcast)
-- [ ] graceful degradation: hub-down => local-only, reconcile on reconnect
+## Next (world-local)
 
-## Conformance
-The bar is `smoke.mjs` (upstream) passing against this server, and `bot.mjs`
-playing it. Same `@event` names/fields, same login flow, same health paths.
+- [ ] **NPCs + `talk`** in the tavern (the dust-dealer / wench; `room.actions` social affordances)
+- [ ] **the redemption arc** — the way back from the cinders (a Front member / ash-sworn redeeming)
+- [ ] **the data-leech zone** — the sump → floodgate → Cold Storage Row, the data-leech mob, the core-shard quest from the stranded operator
+- [ ] **the Cinder Front stronghold (endgame)** — the muster yard past the checkpoint/gate, Front troopers, the cages, the **Ashmonger** boss on the dais
+
+## Next (architecture)
+
+- [ ] **Multiplayer** — a shared session registry on the `World` plus a broadcast
+  path, so `room.info.players` lists others (with `standing`/`ash-sworn`), and
+  `tell`/`reply`/`yell`/`emote`/`server.announce` work. This single step lights up
+  a whole cluster of conformance checks at once. The select-loop sessions are
+  ready for it (each can register on connect and receive pushes on its heartbeat).
+
+## Deferred — the federation engine (not this repo)
+
+The Grid Hub backend (the `GridHubApi`: the shared ledger, the global faction
+tide, cross-world chat, the world registry, the rescued/memorial rolls, presence,
+travel) is the upstream's other half. This port builds the world side and the
+`CharStore` seam only. When the hub exposes an HTTP ingress for external nodes, a
+`GridHubApi` client lands here as Phase 3 — additive, best-effort, never blocking
+play. Until then these checks (`grid.federation`, `grid.echo`, cross-world `who`,
+the persistent rolls, `travel`, `gridcast`) stay red by design.
+
+## Conformance: how to read the scoreboard
+
+```sh
+# against a running server (host) or the container
+MUD_URL=ws://localhost:8790/ws node /path/to/the-hollow-grid/smoke.mjs
+# DUSTFALL_URL too, or it SKIPs the second-world federation phase
+```
+
+A green run is the definition of done. The remaining red is the deferred work
+above, not defects.
