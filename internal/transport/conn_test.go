@@ -376,6 +376,28 @@ func TestWastesAndWaystation(t *testing.T) {
 	mustContain(t, "medic tends", readUntil(t, read, "patches you up"), "patches you up")
 }
 
+// TestTinkerEconomy: the workshop tinker lists wares, and buying a helm (14g of
+// the starting 20) hands it over and lands it in the pack.
+func TestTinkerEconomy(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	read()
+	send("Buyer")
+	read()
+	send("human")
+	read()
+
+	send("east") // nexus -> Tinker's Workshop
+	read()
+	send("list")
+	mustContain(t, "tinker wares", readUntil(t, read, "tinker's wares"), "tinker's wares", "rebar")
+	send("buy helm")
+	mustContain(t, "buy helm", readUntil(t, read, "dented scrap helm"), "hands you a dented scrap helm")
+	send("inventory")
+	mustContain(t, "helm in pack", readUntil(t, read, "scrap helm"), "scrap helm")
+}
+
 // TestHealth checks the liveness probe shape (protocol.md s1).
 func TestHealth(t *testing.T) {
 	ts := newWorldServer(t)

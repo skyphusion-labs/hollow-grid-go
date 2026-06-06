@@ -401,7 +401,7 @@ func (s *session) handle(cmd string) bool {
 		s.line("You read the room for what it asks of you.")
 	case "join":
 		s.joinTheFront()
-	case "sell", "buy", "trade", "list":
+	case "sell", "trade":
 		switch {
 		case s.room().ID != "market":
 			s.line("There is no one here to trade with.")
@@ -409,6 +409,29 @@ func (s *session) handle(cmd string) bool {
 			s.line("The vendor drone's light snaps red and it pulls its wares back. \"We don't trade with your kind.\" The honest market remembers who you swore to.")
 		default:
 			s.line("The vendor drone whirs over your offer, considers, and declines. (the market is still being stocked)")
+		}
+	case "list", "wares":
+		if s.room().ID != "workshop" {
+			s.line("There is no one here selling anything.")
+			break
+		}
+		s.line("The tinker's wares, laid out on an oily cloth:")
+		for _, it := range tinkerStock {
+			s.line(fmt.Sprintf("  %s -- %d gold", world.ItemName(it.id), it.price))
+		}
+	case "buy":
+		switch price, id, ok := tinkerPrice(arg); {
+		case s.room().ID != "workshop":
+			s.line("There is nothing to buy here.")
+		case !ok:
+			s.line("The tinker doesn't sell that.")
+		case s.player.Gold < price:
+			s.line(fmt.Sprintf("You can't afford that -- it is %d gold and you have %d.", price, s.player.Gold))
+		default:
+			s.player.Gold -= price
+			s.player.Inventory = append(s.player.Inventory, id)
+			s.line("The tinker hands you " + world.ItemName(id) + " and pockets your coin.")
+			s.event(event.CharVitals, s.player.Vitals())
 		}
 	case "talk":
 		switch {
@@ -518,6 +541,27 @@ func dreamFor(p *world.Player) string {
 	default:
 		return "You dream of the wastes seen from above, the dead network laid out like veins -- and somewhere down in it, a single cursor, blinking your name, waiting to see what you make of it."
 	}
+}
+
+// tinkerStock is what the workshop tinker sells: item id and price in gold.
+var tinkerStock = []struct {
+	id    string
+	price int
+}{
+	{"helm", 14},
+	{"plating", 18},
+	{"rebar", 20},
+}
+
+// tinkerPrice resolves a buy arg to a stocked item's price and id.
+func tinkerPrice(arg string) (int, string, bool) {
+	arg = strings.ToLower(strings.TrimSpace(arg))
+	for _, it := range tinkerStock {
+		if it.id == arg || strings.Contains(strings.ToLower(world.ItemName(it.id)), arg) {
+			return it.price, it.id, true
+		}
+	}
+	return 0, "", false
 }
 
 // playerDamage is the player's strike: an unarmed base plus the equipped weapon

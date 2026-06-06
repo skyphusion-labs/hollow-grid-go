@@ -218,7 +218,7 @@ type Player struct {
 func NewPlayer(name string, race Race, startRoom string) *Player {
 	mh := maxHPFor(1, race.HPMod)
 	return &Player{
-		Name: name, Race: race.ID, RoomID: startRoom, HP: mh, MaxHP: mh, Level: 1, Faction: "none",
+		Name: name, Race: race.ID, RoomID: startRoom, HP: mh, MaxHP: mh, Level: 1, Gold: 20, Faction: "none",
 		Inventory: []string{Starter}, Equipment: map[string]string{},
 	}
 }
@@ -332,7 +332,7 @@ func (w *World) seed() {
 			Desc:  "A sunken concrete cell, walls scrawled with the tally-marks of the desperate. Chains bolt into the far wall.",
 			Exits: map[string]string{"south": "market"}},
 		{ID: "workshop", Name: "Tinker's Workshop",
-			Desc:  "Workbenches crusted with solder and ambition. A ladder bolted to the wall climbs toward a square of grey sky.",
+			Desc:  "Workbenches crusted with solder and ambition. A tinker hunches over a vise, scavenged gear laid out for sale on an oily cloth. A ladder bolted to the wall climbs toward a square of grey sky.",
 			Exits: map[string]string{"west": "nexus", "up": "roof"}},
 		{ID: "roof", Name: "Rusted Rooftop", Outdoors: true,
 			Desc:  "Wind drags grit across corrugated steel. The wastes stretch out in every direction, indifferent and enormous. A catwalk runs north off the roof's edge and down to the open flats.",
