@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SkyPhusion/hollow-grid-go/internal/store"
 	"github.com/SkyPhusion/hollow-grid-go/internal/transport"
 	"github.com/SkyPhusion/hollow-grid-go/internal/world"
 )
@@ -23,12 +24,19 @@ func main() {
 	addr := flag.String("addr", ":8790", "listen address")
 	name := flag.String("world-name", "The Hollow Grid (Go)", "world display name")
 	url := flag.String("world-url", "", "this world's public URL (for the federation registry)")
+	data := flag.String("data", "data", "directory for local character persistence")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
+	st, err := store.NewFileStore(*data)
+	if err != nil {
+		log.Error("character store failed", "dir", *data, "err", err)
+		os.Exit(1)
+	}
+
 	w := world.New(*name, *url)
-	srv := transport.NewServer(w, log)
+	srv := transport.NewServer(w, st, log)
 
 	httpSrv := &http.Server{
 		Addr:              *addr,
@@ -37,7 +45,7 @@ func main() {
 	}
 
 	go func() {
-		log.Info("hollow-grid-go listening", "addr", *addr, "world", *name)
+		log.Info("hollow-grid-go listening", "addr", *addr, "world", *name, "data", *data)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("server failed", "err", err)
 			os.Exit(1)

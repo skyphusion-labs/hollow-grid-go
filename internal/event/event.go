@@ -20,15 +20,16 @@ const Prefix = "@event "
 
 // Canonical event names (a growing subset of the protocol vocabulary).
 const (
-	RoomInfo    = "room.info"
-	RoomActions = "room.actions"
-	CharVitals  = "char.vitals"
-	CharAffects = "char.affects"
-	CharDied    = "char.died"
-	CombatStart = "combat.start"
-	CombatRound = "combat.round"
-	CombatEnd   = "combat.end"
-	WorldState  = "world.state"
+	RoomInfo     = "room.info"
+	RoomActions  = "room.actions"
+	CharVitals   = "char.vitals"
+	CharAffects  = "char.affects"
+	CharIdentity = "char.identity"
+	CharDied     = "char.died"
+	CombatStart  = "combat.start"
+	CombatRound  = "combat.round"
+	CombatEnd    = "combat.end"
+	WorldState   = "world.state"
 )
 
 // Line formats a single @event line (without the trailing CRLF, which the

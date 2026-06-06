@@ -9,6 +9,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/SkyPhusion/hollow-grid-go/internal/event"
+	"github.com/SkyPhusion/hollow-grid-go/internal/store"
 	"github.com/SkyPhusion/hollow-grid-go/internal/world"
 )
 
@@ -31,10 +32,12 @@ const (
 // command's response (prose + @event lines) in a single WebSocket message. The
 // resolved set remembers the choices made this session, so a defended refugee
 // stays defended and a spoken name stays spoken: the world does not reset your
-// conscience between looks.
+// conscience between looks. The canonical CharSheet is persisted through store,
+// so the character itself is remembered across sessions.
 type session struct {
 	c        *websocket.Conn
 	w        *world.World
+	store    store.CharStore
 	player   *world.Player
 	out      strings.Builder
 	log      *slog.Logger
@@ -72,9 +75,20 @@ func (s *session) read(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
+// persist commits the player's canonical CharSheet. Best-effort: a store failure
+// is logged but never blocks play (the same contract federation will follow).
+func (s *session) persist() {
+	if s.player == nil {
+		return
+	}
+	if err := s.store.Commit(s.player.Name, s.player.Sheet()); err != nil {
+		s.log.Warn("persist failed", "name", s.player.Name, "err", err)
+	}
+}
+
 // handleConn runs the login flow then the command loop for one connection.
-func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, log *slog.Logger) {
-	s := &session{c: c, w: w, log: log, resolved: map[string]bool{}}
+func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store.CharStore, log *slog.Logger) {
+	s := &session{c: c, w: w, store: st, log: log, resolved: map[string]bool{}}
 
 	s.line(banner)
 	s.line("By what name are you known, wanderer?")
@@ -87,21 +101,27 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, log *slo
 		return
 	}
 
-	// A new character chooses a race (a federated, opaque label, chosen once).
-	// With no persistence yet every name is new; resuming an existing sheet (and
-	// skipping the menu) lands with the federation client in Phase 3.
-	s.line("")
-	s.line("The Grid does not know the name " + name + ". A new mind, then.")
-	race := s.chooseRace(ctx)
-	if race == "" {
-		return
+	// Name-based identity (protocol.md s1): a known name resumes its CharSheet
+	// and skips the race menu; a new name chooses a race once. The local store is
+	// the offline fallback; the Grid becomes canonical when federation lands.
+	if sheet, found, lerr := st.Load(name); lerr != nil {
+		log.Warn("char load failed", "name", name, "err", lerr)
+		s.line("")
+		s.line("The Grid stutters and cannot find your record. Entering you as new.")
+		if !s.makeNew(ctx, name, w) {
+			return
+		}
+	} else if found {
+		s.player = world.NewPlayerFromSheet(name, sheet, w.Start().ID)
+		log.Info("player resumed", "name", name, "race", s.player.Race, "world", w.Name)
+		s.line("")
+		s.line("The Grid remembers you, " + name + ". " + resumeLine(s.player))
+	} else {
+		if !s.makeNew(ctx, name, w) {
+			return
+		}
 	}
 
-	s.player = world.NewPlayer(name, race, w.Start().ID)
-	log.Info("player entered", "name", name, "race", race, "world", w.Name)
-
-	s.line("")
-	s.line("The Grid takes your name and your shape. Go carefully, " + race + "; it is watching what you choose.")
 	s.sendScene()
 	if err := s.flush(ctx); err != nil {
 		return
@@ -111,13 +131,44 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, log *slo
 		cmd, err := s.read(ctx)
 		if err != nil {
 			log.Info("player disconnected", "name", name)
+			s.persist()
 			return
 		}
 		quit := s.handle(cmd)
 		_ = s.flush(ctx)
 		if quit {
+			s.persist()
 			return
 		}
+	}
+}
+
+// makeNew runs race selection for a brand-new character and persists it.
+// Returns false if the connection drops mid-choice.
+func (s *session) makeNew(ctx context.Context, name string, w *world.World) bool {
+	s.line("")
+	s.line("The Grid does not know the name " + name + ". A new mind, then.")
+	race := s.chooseRace(ctx)
+	if race == "" {
+		return false
+	}
+	s.player = world.NewPlayer(name, race, w.Start().ID)
+	s.log.Info("player created", "name", name, "race", race, "world", w.Name)
+	s.persist() // hold the new name immediately, before they can be lost
+	s.line("")
+	s.line("The Grid takes your name and your shape. Go carefully, " + race + "; it is watching what you choose.")
+	return true
+}
+
+// resumeLine is a short acknowledgement of who a returning character has become.
+func resumeLine(p *world.Player) string {
+	switch {
+	case p.Faction == "Cinder Front":
+		return "It has not forgotten the coin you took, " + p.Race + "."
+	case p.Morality >= 25:
+		return "It has kept the record of what you chose to be, " + p.Race + "."
+	default:
+		return "You wear the shape of the " + p.Race + " still."
 	}
 }
 
@@ -191,8 +242,11 @@ func (s *session) handle(cmd string) bool {
 		return true
 	case "look", "l":
 		s.sendScene()
+	case "whoami", "identity":
+		s.event(event.CharIdentity, s.player.Sheet())
+		s.line("The Grid reads you back: " + identityLine(s.player))
 	case "help", "h", "?":
-		s.line("Commands: look, <direction>, the verbs in room.actions, help, quit.")
+		s.line("Commands: look, whoami, <direction>, the verbs in room.actions, help, quit.")
 	default:
 		if dest, ok := s.room().Exits[verb]; ok {
 			s.player.RoomID = dest
@@ -209,6 +263,22 @@ func (s *session) handle(cmd string) bool {
 	return false
 }
 
+// identityLine is a short human reading of the canonical sheet (whoami prose).
+func identityLine(p *world.Player) string {
+	stand := "unproven"
+	switch {
+	case p.Morality >= 25:
+		stand = "of the free folk"
+	case p.Morality <= -25 || p.Faction == "Cinder Front":
+		stand = "of the Cinder Front"
+	case p.Morality > 0:
+		stand = "leaning toward the light"
+	case p.Morality < 0:
+		stand = "leaning toward the cinder"
+	}
+	return fmt.Sprintf("%s, level %d, %s.", p.Race, p.Level, stand)
+}
+
 // roomAction finds an unresolved contextual action in the current room by verb.
 func (s *session) roomAction(verb string) (world.Action, bool) {
 	r := s.room()
@@ -222,7 +292,8 @@ func (s *session) roomAction(verb string) (world.Action, bool) {
 
 // resolve applies a contextual choice. The prose is the consequence; the @event
 // channel carries the same truth as data (changed standing, the action now gone
-// from room.actions) so a human and an agent read the same outcome.
+// from room.actions) so a human and an agent read the same outcome. The choice
+// is persisted immediately: who you became here is kept.
 func (s *session) resolve(a world.Action) {
 	rid := s.player.RoomID
 	switch a.Verb {
@@ -244,6 +315,7 @@ func (s *session) resolve(a world.Action) {
 		s.line("Nothing happens.")
 		return
 	}
+	s.persist()
 	// Re-emit the changed truth: standing, vitals, and the now-smaller action set.
 	s.event(event.CharAffects, s.player.Affects())
 	s.event(event.CharVitals, s.player.Vitals())

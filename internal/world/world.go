@@ -40,7 +40,8 @@ type CharVitalsPayload struct {
 }
 
 // CharAffectsPayload is emitted as char.affects: who you are becoming. Morality
-// and faction shift with the choices you make; race is the shape you chose once.
+// and faction shift with the choices you make; race is the shape you chose once;
+// ashsworn is the permanent brand.
 type CharAffectsPayload struct {
 	Morality  int    `json:"morality"`
 	Addiction int    `json:"addiction"`
@@ -64,6 +65,22 @@ type Action struct {
 // RoomActionsPayload is emitted as room.actions with each room view.
 type RoomActionsPayload struct {
 	Actions []Action `json:"actions"`
+}
+
+// CharSheet is the canonical, federated character (docs/protocol.md s3). In
+// federation the Grid owns it (loadCharacter/commitCharacter); a standalone
+// world persists it locally as the documented offline fallback. It is also the
+// char.identity payload (whoami). race is an opaque federated label; ashsworn is
+// the write-once permanent brand.
+type CharSheet struct {
+	Level    int    `json:"level"`
+	XP       int    `json:"xp"`
+	Gold     int    `json:"gold"`
+	Faction  string `json:"faction"`
+	Morality int    `json:"morality"`
+	Title    string `json:"title"`
+	Race     string `json:"race"`
+	Ashsworn bool   `json:"ashsworn"`
 }
 
 // --- races ---
@@ -137,8 +154,9 @@ func (r *Room) SortedExits() []string {
 	return dirs
 }
 
-// Player is a connected character. Identity/progression here is local until the
-// federation client (Phase 3) makes it the canonical, Grid-owned CharSheet.
+// Player is a connected character. The canonical fields (level/xp/gold/faction/
+// morality/title/race/ashsworn) round-trip via CharSheet; HP, room, and position
+// are local/transient and never shared.
 type Player struct {
 	Name     string
 	Race     string
@@ -150,6 +168,8 @@ type Player struct {
 	Gold     int
 	Morality int
 	Faction  string
+	Title    string
+	Ashsworn bool
 }
 
 // NewPlayer spawns a fresh level-1 character of the given race at startRoom.
@@ -157,6 +177,35 @@ func NewPlayer(name, race, startRoom string) *Player {
 	return &Player{
 		Name: name, Race: race, RoomID: startRoom,
 		HP: 50, MaxHP: 50, Level: 1, Faction: "none",
+	}
+}
+
+// NewPlayerFromSheet revives a returning character from a persisted CharSheet:
+// the canonical identity/progression follows them, while local state (hp, room,
+// position) starts fresh at the gate.
+func NewPlayerFromSheet(name string, s CharSheet, startRoom string) *Player {
+	faction := s.Faction
+	if faction == "" {
+		faction = "none"
+	}
+	level := s.Level
+	if level < 1 {
+		level = 1
+	}
+	return &Player{
+		Name: name, Race: s.Race, RoomID: startRoom,
+		HP: 50, MaxHP: 50,
+		Level: level, XP: s.XP, Gold: s.Gold,
+		Morality: s.Morality, Faction: faction, Title: s.Title, Ashsworn: s.Ashsworn,
+	}
+}
+
+// Sheet renders the player's canonical CharSheet (for persistence, char.identity,
+// and, later, commitCharacter to the Grid).
+func (p *Player) Sheet() CharSheet {
+	return CharSheet{
+		Level: p.Level, XP: p.XP, Gold: p.Gold, Faction: p.Faction,
+		Morality: p.Morality, Title: p.Title, Race: p.Race, Ashsworn: p.Ashsworn,
 	}
 }
 
@@ -170,7 +219,9 @@ func (p *Player) Vitals() CharVitalsPayload {
 
 // Affects renders the player as a char.affects payload.
 func (p *Player) Affects() CharAffectsPayload {
-	return CharAffectsPayload{Morality: p.Morality, Faction: p.Faction, Race: p.Race}
+	return CharAffectsPayload{
+		Morality: p.Morality, Faction: p.Faction, Race: p.Race, Ashsworn: p.Ashsworn,
+	}
 }
 
 // World is one local game world (a node on the Grid).

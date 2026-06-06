@@ -6,6 +6,8 @@
 *.test
 *.out
 /vendor/
+# local persistence (character sheets)
+/data/
 # editor/os
 .DS_Store
 *.swp
