@@ -56,7 +56,10 @@ func (s *Server) healthDeep(w http.ResponseWriter, r *http.Request) {
 	worldOK := s.world.Start() != nil
 	checks := map[string]any{
 		"world": map[string]any{"ok": worldOK, "latency_ms": 0, "critical": true},
-		// grid_hub check lands with the federation client (Phase 3).
+		// Non-critical: federation never blocks play (docs/federation.md s8).
+		// Stubbed reachable while standalone; becomes a real tide() probe when the
+		// federation client lands (Phase 3).
+		"grid_hub": map[string]any{"ok": true, "latency_ms": 0, "critical": false},
 	}
 	code := http.StatusOK
 	if !worldOK {
