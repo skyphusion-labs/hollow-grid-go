@@ -32,6 +32,7 @@ const (
 	CombatRound   = "combat.round"
 	CombatEnd     = "combat.end"
 	WorldState    = "world.state"
+	GridRescued   = "grid.rescued"
 )
 
 // Line formats a single @event line (without the trailing CRLF, which the

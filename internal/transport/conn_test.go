@@ -398,6 +398,40 @@ func TestTinkerEconomy(t *testing.T) {
 	mustContain(t, "helm in pack", readUntil(t, read, "scrap helm"), "scrap helm")
 }
 
+// TestHoldingPitRescue: beat the warden, then free the captive -- a real rescue
+// (+morality, grid.rescued naming who was saved and who saved them).
+func TestHoldingPitRescue(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	read()
+	send("Liberator")
+	read()
+	send("human")
+	read()
+
+	send("north") // -> Scrap Market
+	read()
+	send("north") // -> The Holding Pit (warden + captive)
+	mustContain(t, "warden present", readUntil(t, read, `"id":"holding_pit"`), `"mobs":[{"id":"warden"`)
+
+	send("attack warden")
+	readUntil(t, read, "@event combat.start")
+	killed := false
+	for i := 0; i < 10 && !killed; i++ {
+		if strings.Contains(read(), `"result":"killed"`) {
+			killed = true
+		}
+	}
+	if !killed {
+		t.Skip("the warden won this run (combat variance)")
+	}
+
+	send("free")
+	freed := readUntil(t, read, "@event grid.rescued")
+	mustContain(t, "rescue", freed, `"savedBy":"Liberator"`, `"freed":["a captive maiden"]`, `"morality":15`)
+}
+
 // TestHealth checks the liveness probe shape (protocol.md s1).
 func TestHealth(t *testing.T) {
 	ts := newWorldServer(t)

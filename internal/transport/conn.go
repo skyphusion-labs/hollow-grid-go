@@ -455,6 +455,8 @@ func (s *session) handle(cmd string) bool {
 			s.line("The waystation medic, run off their feet, patches you up and sends you on whole.")
 			s.event(event.CharVitals, s.player.Vitals())
 		}
+	case "free", "rescue":
+		s.freeCaptive()
 	case "ability", "trait":
 		s.useTrait()
 	case "help", "h", "?":
@@ -493,6 +495,34 @@ func identityLine(p *world.Player) string {
 		stand = "leaning toward the cinder"
 	}
 	return fmt.Sprintf("%s, level %d, %s.", p.Race, p.Level, stand)
+}
+
+// freeCaptive releases the prisoner in the current room -- but only once the
+// warden guarding them is down. It is a real rescue, not loot: it raises your
+// standing and emits grid.rescued (who you saved, and who saved them), so the
+// freed are named and remembered, not farmed.
+func (s *session) freeCaptive() {
+	r := s.room()
+	switch {
+	case r.Captive == "":
+		s.line("There is no one here to free.")
+		return
+	case s.resolved[r.ID+":free"]:
+		s.line("The cage is already empty. Aid given is aid given, once.")
+		return
+	}
+	for _, m := range r.Mobs {
+		if m.ID == "warden" {
+			s.line("The warden stands between you and the cage, keys on their belt. You will have to put them down first.")
+			return
+		}
+	}
+	s.markResolved(r.ID, "free")
+	s.shiftMorality(15)
+	s.persist()
+	s.event(event.GridRescued, world.GridRescuedPayload{SavedBy: s.player.Name, Freed: []string{r.Captive}})
+	s.line("You strike the chains free. " + capitalize(r.Captive) + " presses something into your hand and is gone into the dark before you can ask a name -- but the Grid keeps the record, names the freed and names who freed them. It will not let this be forgotten.")
+	s.event(event.CharAffects, s.player.Affects())
 }
 
 // joinTheFront swears the player to the Cinder Front (faction "front"). A hunted

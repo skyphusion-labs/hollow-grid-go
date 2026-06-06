@@ -102,6 +102,13 @@ type CharDreamPayload struct {
 	Text string `json:"text"`
 }
 
+// GridRescuedPayload is emitted as grid.rescued when you free a captive: who you
+// saved, and who did the saving. (The persistent cross-world roll is federation.)
+type GridRescuedPayload struct {
+	SavedBy string   `json:"savedBy"`
+	Freed   []string `json:"freed"`
+}
+
 // CharSheet is the canonical, federated character (docs/protocol.md s3): the Grid
 // owns it in federation; standalone persists it locally. Also the char.identity
 // payload (whoami).
@@ -129,6 +136,7 @@ type Room struct {
 	Actions  []Action
 	Outdoors bool
 	Mobs     []*Mob // live creatures in the room
+	Captive  string // a prisoner who can be freed here (after any warden is down)
 }
 
 // Info renders the room as a room.info payload with a stable exit ordering.
@@ -357,6 +365,9 @@ func (w *World) seed() {
 	// a raider prowls the Scorch Road.
 	w.rooms["tunnels"].Mobs = []*Mob{newMob("rat")}
 	w.rooms["scorch_road"].Mobs = []*Mob{newMob("raider")}
+	// The holding pit: a warden, and a captive to free once the warden is down.
+	w.rooms["holding_pit"].Mobs = []*Mob{newMob("warden")}
+	w.rooms["holding_pit"].Captive = "a captive maiden"
 }
 
 // State renders the current living-world state (world.state payload), derived
