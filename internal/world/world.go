@@ -149,13 +149,19 @@ type Player struct {
 	Faction  string
 	Title    string
 	Ashsworn bool
+	// Local state (never federated): the pack and what is worn. See items.go.
+	Inventory []string
+	Equipment map[string]string // slot -> item id
 }
 
 // NewPlayer spawns a fresh level-1 character of the given race at startRoom, with
 // the race's max-HP lean applied.
 func NewPlayer(name string, race Race, startRoom string) *Player {
 	mh := maxHPFor(1, race.HPMod)
-	return &Player{Name: name, Race: race.ID, RoomID: startRoom, HP: mh, MaxHP: mh, Level: 1, Faction: "none"}
+	return &Player{
+		Name: name, Race: race.ID, RoomID: startRoom, HP: mh, MaxHP: mh, Level: 1, Faction: "none",
+		Inventory: []string{Starter}, Equipment: map[string]string{},
+	}
 }
 
 // NewPlayerFromSheet revives a returning character from a persisted CharSheet:
@@ -176,6 +182,9 @@ func NewPlayerFromSheet(name string, s CharSheet, startRoom string) *Player {
 		Name: name, Race: s.Race, RoomID: startRoom, HP: mh, MaxHP: mh,
 		Level: level, XP: s.XP, Gold: s.Gold,
 		Morality: s.Morality, Faction: faction, Title: s.Title, Ashsworn: s.Ashsworn,
+		// Inventory is world-local and not federated; a returning character wakes
+		// with the starter again (local item persistence is a later concern).
+		Inventory: []string{Starter}, Equipment: map[string]string{},
 	}
 }
 

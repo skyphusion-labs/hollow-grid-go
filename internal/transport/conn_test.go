@@ -131,6 +131,33 @@ func TestWhoamiEmitsIdentity(t *testing.T) {
 	mustContain(t, "whoami", read(), "@event char.identity", `"race":"ghoul"`)
 }
 
+// TestEquipmentAndTitle: the starter shiv is in the pack, wield/remove move it
+// in and out of the weapon slot on char.equipment, and a title shows in who.
+func TestEquipmentAndTitle(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	read()
+	send("Ash")
+	read()
+	send("human")
+	read() // at the nexus
+
+	send("inventory")
+	mustContain(t, "inventory", read(), "rusted shiv")
+
+	send("wield shiv")
+	mustContain(t, "wield", read(), "@event char.equipment", `"weapon":"shiv"`)
+
+	send("remove shiv")
+	mustContain(t, "remove", read(), "@event char.equipment", `"weapon":null`)
+
+	send("title the Ash-Walker")
+	read()
+	send("who")
+	mustContain(t, "who", read(), "Ash the Ash-Walker")
+}
+
 // TestHealth checks the liveness probe shape (protocol.md s1).
 func TestHealth(t *testing.T) {
 	ts := newWorldServer(t)

@@ -231,6 +231,7 @@ func (s *session) handle(cmd string) bool {
 		return false
 	}
 	verb := strings.ToLower(fields[0])
+	arg := strings.TrimSpace(strings.Join(fields[1:], " "))
 	switch verb {
 	case "quit", "q":
 		s.line("The Grid goes quiet. It keeps what you did here.")
@@ -240,6 +241,39 @@ func (s *session) handle(cmd string) bool {
 	case "whoami", "identity":
 		s.event(event.CharIdentity, s.player.Sheet())
 		s.line("The Grid reads you back: " + identityLine(s.player))
+	case "inventory", "inv", "i":
+		if names := s.player.InventoryNames(); len(names) == 0 {
+			s.line("You carry nothing.")
+		} else {
+			s.line("You carry: " + strings.Join(names, ", ") + ".")
+		}
+	case "wield", "wear", "equip":
+		if it, ok := s.player.Wear(arg); ok {
+			s.line("You ready " + it.Name + ".")
+			s.event(event.CharEquipment, s.player.Equip())
+		} else {
+			s.line("You have nothing like that to wear.")
+		}
+	case "remove", "unwield":
+		if it, ok := s.player.Unwear(arg); ok {
+			s.line("You stow " + it.Name + ".")
+			s.event(event.CharEquipment, s.player.Equip())
+		} else {
+			s.line("You are not wearing that.")
+		}
+	case "equipment", "eq":
+		s.event(event.CharEquipment, s.player.Equip())
+		s.line(s.equipmentLine())
+	case "title":
+		s.player.Title = arg
+		s.persist()
+		if arg == "" {
+			s.line("Your title is cleared.")
+		} else {
+			s.line("Your title is now: " + arg + ".")
+		}
+	case "who":
+		s.line(s.whoLine())
 	case "world", "weather":
 		ws := s.w.State()
 		s.event(event.WorldState, ws)
@@ -275,6 +309,31 @@ func identityLine(p *world.Player) string {
 		stand = "leaning toward the cinder"
 	}
 	return fmt.Sprintf("%s, level %d, %s.", p.Race, p.Level, stand)
+}
+
+// equipmentLine summarises what the player is wearing, in slot order.
+func (s *session) equipmentLine() string {
+	worn := make([]string, 0, len(world.EquipSlots))
+	for _, sl := range world.EquipSlots {
+		if id, ok := s.player.Equipment[sl]; ok {
+			worn = append(worn, sl+": "+world.ItemName(id))
+		}
+	}
+	if len(worn) == 0 {
+		return "You are wearing nothing."
+	}
+	return "You are wearing -- " + strings.Join(worn, "; ") + "."
+}
+
+// whoLine lists who is online with their titles. A shared session registry for
+// real multiplayer presence lands later; for now it reads back the player
+// themselves (title after the name), which is what the contract checks.
+func (s *session) whoLine() string {
+	name := s.player.Name
+	if s.player.Title != "" {
+		name += " " + s.player.Title
+	}
+	return "Online: " + name + "."
 }
 
 // roomAction finds an unresolved contextual action in the current room by verb.
