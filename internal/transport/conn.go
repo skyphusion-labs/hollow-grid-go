@@ -410,6 +410,28 @@ func (s *session) handle(cmd string) bool {
 		default:
 			s.line("The vendor drone whirs over your offer, considers, and declines. (the market is still being stocked)")
 		}
+	case "talk":
+		switch {
+		case s.room().ID != "waystation":
+			s.line("There is no one here with anything to say to you.")
+		case s.player.Faction == "front" || s.player.Ashsworn:
+			s.line("The free folk at the Refugee Waystation go silent and still as you walk in. You are not welcome here.")
+		case s.player.Morality >= 25:
+			s.line("The free folk welcome you to the Refugee Waystation as one of their own.")
+		default:
+			s.line("The free folk holding the Refugee Waystation look you over and decide nothing. Pick a side, wanderer, or move along.")
+		}
+	case "treat", "medic":
+		switch {
+		case s.room().ID != "waystation":
+			s.line("There is no medic here.")
+		case s.player.Faction == "front" || s.player.Ashsworn:
+			s.line("The waystation medic looks at your brand and turns their back. There is no care to be had here for your kind.")
+		default:
+			s.player.HP = s.player.MaxHP
+			s.line("The waystation medic, run off their feet, patches you up and sends you on whole.")
+			s.event(event.CharVitals, s.player.Vitals())
+		}
 	case "ability", "trait":
 		s.useTrait()
 	case "help", "h", "?":

@@ -346,6 +346,36 @@ func TestCinderFrontMoralArc(t *testing.T) {
 	mustContain(t, "ash-sworn brand", readUntil(t, read2, "ash-sworn"), "ash-sworn", `"ashsworn":true`)
 }
 
+// TestWastesAndWaystation: the wastes are reachable (roof -> Ash Flats -> Scorch
+// Road with a raider -> Refugee Waystation), the waystation reads your standing,
+// and the medic tends you there.
+func TestWastesAndWaystation(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	read()
+	send("Walker")
+	read()
+	send("human")
+	read()
+
+	send("east") // nexus -> workshop
+	read()
+	send("up") // -> roof
+	read()
+	send("north") // -> the Ash Flats (dunes)
+	mustContain(t, "ash flats", readUntil(t, read, `"id":"dunes"`), `"id":"dunes"`)
+	send("east") // -> Scorch Road, the raider
+	mustContain(t, "scorch road raider", readUntil(t, read, `"id":"scorch_road"`),
+		`"id":"scorch_road"`, `"mobs":[{"id":"raider"`)
+	send("east") // -> Refugee Waystation
+	read()
+	send("talk")
+	mustContain(t, "waystation standing", readUntil(t, read, "Pick a side"), "Pick a side")
+	send("treat")
+	mustContain(t, "medic tends", readUntil(t, read, "patches you up"), "patches you up")
+}
+
 // TestHealth checks the liveness probe shape (protocol.md s1).
 func TestHealth(t *testing.T) {
 	ts := newWorldServer(t)

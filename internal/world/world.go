@@ -340,12 +340,23 @@ func (w *World) seed() {
 		{ID: "tunnels", Name: "Service Tunnels",
 			Desc:  "Cramped, dripping, and lit by one surviving strip light. Something skitters in the dark just past the reach of it.",
 			Exits: map[string]string{"up": "nexus"}},
+		{ID: "dunes", Name: "The Ash Flats", Outdoors: true,
+			Desc:  "The wastes proper: a grey pan of ash and salt running to a horizon you cannot trust. The rooftop catwalk drops back south; the cracked Scorch Road runs east.",
+			Exits: map[string]string{"south": "roof", "east": "scorch_road"}},
+		{ID: "scorch_road", Name: "Scorch Road", Outdoors: true,
+			Desc:  "A highway the sun has been working on for a long time; heat-shimmer crawls off the tar. Something moves out here that is not the wind. The flats lie west; a waystation flag snaps to the east.",
+			Exits: map[string]string{"west": "dunes", "east": "waystation"}},
+		{ID: "waystation", Name: "Refugee Waystation", Outdoors: true,
+			Desc:  "A huddle of tarps and water-drums where the free folk who run from the Cinder Front catch their breath. A medic works a line of the hurt. Eyes track every newcomer, weighing which side they came in on. The road runs back west.",
+			Exits: map[string]string{"west": "scorch_road"}},
 	}
 	for _, r := range rooms {
 		w.rooms[r.ID] = r
 	}
-	// Spawn the local bestiary into its rooms. The glow-rat haunts the tunnels.
+	// Spawn the local bestiary into its rooms: the glow-rat haunts the tunnels,
+	// a raider prowls the Scorch Road.
 	w.rooms["tunnels"].Mobs = []*Mob{newMob("rat")}
+	w.rooms["scorch_road"].Mobs = []*Mob{newMob("raider")}
 }
 
 // State renders the current living-world state (world.state payload), derived

@@ -27,6 +27,7 @@ var mobTemplates = map[string]Mob{
 	"scav":     {ID: "scav", Name: "a feral scavenger", Desc: "A wiry figure in stitched rags, eyeing your gear like it's already theirs.", MaxHP: 26, Damage: 6},
 	"drone":    {ID: "drone", Name: "a malfunctioning drone", Desc: "A dented quadcopter sparking at the rotors, its targeting laser twitching.", MaxHP: 18, Damage: 5},
 	"scorpion": {ID: "scorpion", Name: "a rad-scorpion", Desc: "A dog-sized arthropod of chitin and rust, tail arched and dripping venom.", MaxHP: 10, Damage: 5},
+	"raider":   {ID: "raider", Name: "a wastes raider", Desc: "A scarred figure wrapped in sun-bleached rags and scavenged plate, hefting a length of rebar and grinning at the easy mark you make.", MaxHP: 22, Damage: 6},
 }
 
 // newMob spawns a fresh full-HP instance of a template id (nil if unknown).
