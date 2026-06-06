@@ -149,17 +149,11 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store
 		}
 	}()
 
-	var tick *time.Ticker
-	defer func() {
-		if tick != nil {
-			tick.Stop()
-		}
-	}()
+	// The living-world heartbeat: always on. It turns the clock (world.state),
+	// ticks combat, and regenerates resting players.
+	heartbeat := time.NewTicker(worldHeartbeat)
+	defer heartbeat.Stop()
 	for {
-		var tc <-chan time.Time
-		if tick != nil {
-			tc = tick.C
-		}
 		select {
 		case <-readerDone:
 			log.Info("player disconnected", "name", name)
@@ -172,19 +166,38 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store
 				s.persist()
 				return
 			}
-		case <-tc:
-			s.combatRound()
+		case <-heartbeat.C:
+			s.onTick()
 			_ = s.flush(ctx)
 		}
-		// Start/stop the combat ticker to match the player's combat state.
-		switch {
-		case s.player.Target != nil && tick == nil:
-			tick = time.NewTicker(1500 * time.Millisecond)
-		case s.player.Target == nil && tick != nil:
-			tick.Stop()
-			tick = nil
-		}
 	}
+}
+
+// worldHeartbeat is the session tick: the world clock advances, combat resolves,
+// and resting players mend, all on this beat.
+const worldHeartbeat = 2 * time.Second
+
+// onTick runs one living-world beat for this session.
+func (s *session) onTick() {
+	s.event(event.WorldState, s.w.State())
+	switch {
+	case s.player.Target != nil:
+		s.combatRound()
+	case s.player.Position == "resting":
+		s.regen()
+	}
+}
+
+// regen mends a resting player; the race's regen lean speeds it.
+func (s *session) regen() {
+	if s.player.HP >= s.player.MaxHP {
+		return
+	}
+	s.player.HP += 2 + world.RaceByID(s.player.Race).Regen
+	if s.player.HP > s.player.MaxHP {
+		s.player.HP = s.player.MaxHP
+	}
+	s.event(event.CharVitals, s.player.Vitals())
 }
 
 // makeNew runs race selection for a brand-new character and persists it. Returns
@@ -305,6 +318,7 @@ func (s *session) handle(cmd string) bool {
 		case m == nil:
 			s.line("There's nothing like that here to attack.")
 		default:
+			s.player.Position = "standing"
 			s.player.Target = m
 			s.event(event.CombatStart, world.CombatStartPayload{Mob: m.ID, Name: m.Name})
 			s.line("You throw yourself at " + m.Name + ".")
@@ -358,11 +372,20 @@ func (s *session) handle(cmd string) bool {
 		}
 	case "recall":
 		s.player.RoomID = s.w.Start().ID
+		s.player.Position = "standing"
 		s.line("The Grid reaches into you and folds the world. You come apart and back together at the Cracked Nexus.")
 		s.sendScene()
 	case "affects":
 		s.event(event.CharAffects, s.player.Affects())
 		s.line("You stand clear: no afflictions hold you. (" + identityLine(s.player) + ")")
+	case "rest":
+		s.player.Position = "resting"
+		s.line("You settle against the cold metal and let your breath slow.")
+		s.event(event.CharVitals, s.player.Vitals())
+	case "stand", "wake":
+		s.player.Position = "standing"
+		s.line("You get to your feet.")
+		s.event(event.CharVitals, s.player.Vitals())
 	case "ability", "trait":
 		s.useTrait()
 	case "help", "h", "?":
@@ -370,6 +393,7 @@ func (s *session) handle(cmd string) bool {
 	default:
 		if dest, ok := s.room().Exits[verb]; ok {
 			s.player.RoomID = dest
+			s.player.Position = "standing"
 			s.sendScene()
 			return false
 		}

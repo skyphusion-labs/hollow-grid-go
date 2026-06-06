@@ -240,6 +240,42 @@ func TestCombatKillsTheGlowRat(t *testing.T) {
 	}
 }
 
+// TestLivingWorldAndRest: the world clock advances on its own (heartbeat
+// world.state with a non-zero tick), and rest sets position to resting.
+func TestLivingWorldAndRest(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	read()
+	send("Idler")
+	read()
+	send("human")
+	read() // entry: world.state has tick 0
+
+	advanced := false
+	for i := 0; i < 6 && !advanced; i++ {
+		msg := read() // heartbeats arrive on their own
+		if strings.Contains(msg, "@event world.state") && !strings.Contains(msg, `"tick":0`) {
+			advanced = true
+		}
+	}
+	if !advanced {
+		t.Fatal("world clock did not advance on its own")
+	}
+
+	send("rest")
+	// the rest reply, or the next heartbeat, shows resting
+	resting := false
+	for i := 0; i < 3 && !resting; i++ {
+		if strings.Contains(read(), `"position":"resting"`) {
+			resting = true
+		}
+	}
+	if !resting {
+		t.Fatal("rest did not set position to resting")
+	}
+}
+
 // TestHealth checks the liveness probe shape (protocol.md s1).
 func TestHealth(t *testing.T) {
 	ts := newWorldServer(t)

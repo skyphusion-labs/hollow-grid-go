@@ -203,6 +203,8 @@ type Player struct {
 	TraitReadyAt time.Time
 	// Target is the mob this player is fighting (nil = not in combat).
 	Target *Mob
+	// Position is "standing" or "resting" (combat overrides it to "fighting").
+	Position string
 }
 
 // NewPlayer spawns a fresh level-1 character of the given race at startRoom, with
@@ -249,7 +251,10 @@ func (p *Player) Sheet() CharSheet {
 
 // Vitals renders the player as a char.vitals payload.
 func (p *Player) Vitals() CharVitalsPayload {
-	pos := "standing"
+	pos := p.Position
+	if pos == "" {
+		pos = "standing"
+	}
 	if p.Target != nil {
 		pos = "fighting"
 	}
@@ -272,9 +277,21 @@ type World struct {
 	URL     string
 	rooms   map[string]*Room
 	startID string
-	phase   string
-	weather string
+	started time.Time
 }
+
+// The living world is a pure function of elapsed time: tick, phase, and weather
+// derive from how long the world has been up, so every observer agrees and there
+// is no shared mutable clock to race on. (A global broadcast heartbeat is the
+// multiplayer refinement; single observers see it advance via their own ticker.)
+const (
+	worldTick         = 2 * time.Second
+	phaseEveryTicks   = 30
+	weatherEveryTicks = 9
+)
+
+var phases = []string{"day", "dusk", "night", "dawn"}
+var weathers = []string{"clear", "a haze of grid-static", "acid drizzle", "a dust storm", "an unnatural stillness"}
 
 // New builds the world with the canonical opening map plus the preserved bonus
 // zone. The living world is static for now (a valid phase/weather); the tick loop
@@ -282,7 +299,7 @@ type World struct {
 func New(name, url string) *World {
 	w := &World{
 		Name: name, URL: url, rooms: map[string]*Room{},
-		startID: "nexus", phase: "day", weather: "clear",
+		startID: "nexus", started: time.Now(),
 	}
 	w.seed()
 	w.seedBonus()
@@ -321,9 +338,15 @@ func (w *World) seed() {
 	w.rooms["tunnels"].Mobs = []*Mob{newMob("rat")}
 }
 
-// State renders the current living-world state (world.state payload).
+// State renders the current living-world state (world.state payload), derived
+// from elapsed time so the clock turns on its own.
 func (w *World) State() WorldStatePayload {
-	return WorldStatePayload{Tick: 0, Phase: w.phase, Weather: w.weather}
+	tick := int(time.Since(w.started) / worldTick)
+	return WorldStatePayload{
+		Tick:    tick,
+		Phase:   phases[(tick/phaseEveryTicks)%len(phases)],
+		Weather: weathers[(tick/weatherEveryTicks)%len(weathers)],
+	}
 }
 
 // Room returns a room by id, or nil.
