@@ -181,6 +181,28 @@ func TestRacialAbilityRequisition(t *testing.T) {
 	mustContain(t, "cooldown", read(), "recharging")
 }
 
+// TestMobsConsiderLook: the glow-rat shows up in room.info as an object, and
+// consider/look <mob> read it (the synchronous half of the combat phase).
+func TestMobsConsiderLook(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	read()
+	send("Hunter")
+	read()
+	send("human")
+	read()
+
+	send("down") // nexus -> tunnels, where the glow-rat lives
+	mustContain(t, "tunnels mobs", read(), `"id":"tunnels"`, `"mobs":[{"id":"rat"`)
+
+	send("consider rat")
+	mustContain(t, "consider", read(), "sweat") // a glow-rat is weak vs a level-1
+
+	send("look rat")
+	mustContain(t, "look rat", read(), "rodent")
+}
+
 // TestHealth checks the liveness probe shape (protocol.md s1).
 func TestHealth(t *testing.T) {
 	ts := newWorldServer(t)

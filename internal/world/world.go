@@ -11,6 +11,7 @@ package world
 
 import (
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -21,7 +22,7 @@ type RoomInfoPayload struct {
 	ID      string   `json:"id"`
 	Name    string   `json:"name"`
 	Exits   []string `json:"exits"`
-	Mobs    []string `json:"mobs"`
+	Mobs    []MobRef `json:"mobs"`
 	Items   []string `json:"items"`
 	Players []string `json:"players"`
 }
@@ -98,6 +99,7 @@ type Room struct {
 	Exits    map[string]string
 	Actions  []Action
 	Outdoors bool
+	Mobs     []*Mob // live creatures in the room
 }
 
 // Info renders the room as a room.info payload with a stable exit ordering.
@@ -107,10 +109,29 @@ func (r *Room) Info() RoomInfoPayload {
 		exits = append(exits, dir)
 	}
 	sort.Strings(exits)
+	mobs := make([]MobRef, 0, len(r.Mobs))
+	for _, m := range r.Mobs {
+		mobs = append(mobs, m.Ref())
+	}
 	return RoomInfoPayload{
 		ID: r.ID, Name: r.Name, Exits: exits,
-		Mobs: []string{}, Items: []string{}, Players: []string{},
+		Mobs: mobs, Items: []string{}, Players: []string{},
 	}
+}
+
+// Mob returns a live mob in the room matching arg (id or name substring), or nil.
+func (r *Room) Mob(arg string) *Mob {
+	arg = strings.ToLower(strings.TrimSpace(arg))
+	if arg == "" {
+		return nil
+	}
+	for _, m := range r.Mobs {
+		if m.ID == arg || strings.Contains(strings.ToLower(m.ID), arg) ||
+			strings.Contains(strings.ToLower(m.Name), arg) {
+			return m
+		}
+	}
+	return nil
 }
 
 // SortedExits returns the room's exit directions in stable order.
@@ -267,6 +288,8 @@ func (w *World) seed() {
 	for _, r := range rooms {
 		w.rooms[r.ID] = r
 	}
+	// Spawn the local bestiary into its rooms. The glow-rat haunts the tunnels.
+	w.rooms["tunnels"].Mobs = []*Mob{newMob("rat")}
 }
 
 // State renders the current living-world state (world.state payload).

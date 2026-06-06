@@ -239,7 +239,21 @@ func (s *session) handle(cmd string) bool {
 		s.line("The Grid goes quiet. It keeps what you did here.")
 		return true
 	case "look", "l":
+		if arg != "" {
+			if m := s.room().Mob(arg); m != nil {
+				s.line(m.Desc)
+			} else {
+				s.line("You don't see that here.")
+			}
+			break
+		}
 		s.sendScene()
+	case "consider", "con":
+		if m := s.room().Mob(arg); m != nil {
+			s.line(considerLine(s.player, m))
+		} else {
+			s.line("There's nothing like that here to size up.")
+		}
 	case "whoami", "identity":
 		s.event(event.CharIdentity, s.player.Sheet())
 		s.line("The Grid reads you back: " + identityLine(s.player))
@@ -330,6 +344,30 @@ func identityLine(p *world.Player) string {
 		stand = "leaning toward the cinder"
 	}
 	return fmt.Sprintf("%s, level %d, %s.", p.Race, p.Level, stand)
+}
+
+// considerLine sizes up a mob relative to the player (src/world.ts consider).
+func considerLine(p *world.Player, m *world.Mob) string {
+	ratio := float64(m.MaxHP) / float64(p.MaxHP)
+	switch {
+	case ratio < 0.5:
+		return fmt.Sprintf("You could put %s down without breaking a sweat.", m.Name)
+	case ratio < 0.9:
+		return fmt.Sprintf("%s would give you a tussle, but the odds are yours.", capitalize(m.Name))
+	case ratio < 1.3:
+		return fmt.Sprintf("%s looks like an even match. Bring an antidote.", capitalize(m.Name))
+	case ratio < 2.0:
+		return fmt.Sprintf("%s would likely gut you. Think twice.", capitalize(m.Name))
+	default:
+		return fmt.Sprintf("Attacking %s would be a quiet way to die.", m.Name)
+	}
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // equipmentLine summarises what the player is wearing, in slot order.
