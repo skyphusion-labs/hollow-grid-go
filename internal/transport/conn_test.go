@@ -158,6 +158,29 @@ func TestEquipmentAndTitle(t *testing.T) {
 	mustContain(t, "who", read(), "Ash the Ash-Walker")
 }
 
+// TestRacialAbilityRequisition: a human's Requisition grants gold, and the
+// ability respects its cooldown on an immediate second use.
+func TestRacialAbilityRequisition(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	read()
+	send("Reg")
+	read()
+	send("human")
+	read()
+
+	send("requisition")
+	first := read()
+	mustContain(t, "requisition", first, "@event char.vitals", "gold")
+	if strings.Contains(first, `"gold":0`) {
+		t.Fatalf("requisition granted no gold: %q", first)
+	}
+
+	send("requisition")
+	mustContain(t, "cooldown", read(), "recharging")
+}
+
 // TestHealth checks the liveness probe shape (protocol.md s1).
 func TestHealth(t *testing.T) {
 	ts := newWorldServer(t)

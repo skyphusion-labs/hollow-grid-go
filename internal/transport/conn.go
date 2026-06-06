@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/coder/websocket"
 
@@ -278,12 +280,31 @@ func (s *session) handle(cmd string) bool {
 		ws := s.w.State()
 		s.event(event.WorldState, ws)
 		s.line(fmt.Sprintf("The sky: %s, %s.", ws.Phase, ws.Weather))
+	case "exits":
+		if r := s.room(); len(r.Exits) == 0 {
+			s.line("There are no obvious ways out.")
+		} else {
+			s.line("Exits: " + strings.Join(r.SortedExits(), ", ") + ".")
+		}
+	case "recall":
+		s.player.RoomID = s.w.Start().ID
+		s.line("The Grid reaches into you and folds the world. You come apart and back together at the Cracked Nexus.")
+		s.sendScene()
+	case "affects":
+		s.event(event.CharAffects, s.player.Affects())
+		s.line("You stand clear: no afflictions hold you. (" + identityLine(s.player) + ")")
+	case "ability", "trait":
+		s.useTrait()
 	case "help", "h", "?":
 		s.line("Commands: look, whoami, world, <direction>, the verbs in room.actions, help, quit.")
 	default:
 		if dest, ok := s.room().Exits[verb]; ok {
 			s.player.RoomID = dest
 			s.sendScene()
+			return false
+		}
+		if verb == world.RaceByID(s.player.Race).Ability.Verb {
+			s.useTrait()
 			return false
 		}
 		if a, ok := s.roomAction(verb); ok {
@@ -334,6 +355,65 @@ func (s *session) whoLine() string {
 		name += " " + s.player.Title
 	}
 	return "Online: " + name + "."
+}
+
+// useTrait fires the character's racial signature ability (src/world.ts useTrait):
+// cooldown-gated, with blocking conditions that do NOT spend the cooldown. The
+// effects that need a live fight (chromed's Overclock, elf's Vanish) land with
+// combat; the self-contained ones (Requisition, the heals, Forage) work now.
+func (s *session) useTrait() {
+	r := world.RaceByID(s.player.Race)
+	ab := r.Ability
+	now := time.Now()
+	if now.Before(s.player.TraitReadyAt) {
+		s.line(fmt.Sprintf("%s is still recharging. (%ds)", ab.Name, int(s.player.TraitReadyAt.Sub(now).Seconds())+1))
+		return
+	}
+
+	// Blocking conditions spend no cooldown.
+	switch s.player.Race {
+	case "chromed":
+		s.line("You spin your augments up to a scream, but there's nothing here to dump the charge into.")
+		return
+	case "elf":
+		s.line("You ready to slip the net, but there is no fight here to vanish from.")
+		return
+	case "dustkin":
+		if !s.room().Outdoors {
+			s.line("Nothing to forage in here. You need the open wastes under the sky.")
+			return
+		}
+	}
+
+	s.player.TraitReadyAt = now.Add(time.Duration(ab.CooldownMs) * time.Millisecond)
+	heal := func(amount int, prose string) {
+		s.player.HP += amount
+		if s.player.HP > s.player.MaxHP {
+			s.player.HP = s.player.MaxHP
+		}
+		s.line(fmt.Sprintf("%s (+%d hp)", prose, amount))
+		s.event(event.CharVitals, s.player.Vitals())
+	}
+	switch s.player.Race {
+	case "human":
+		coin := 15 + rand.Intn(16)
+		s.player.Gold += coin
+		s.line(fmt.Sprintf("You flash credentials nobody bothers to check. The registry still provides for its own. (+%d gold)", coin))
+		s.event(event.CharVitals, s.player.Vitals())
+	case "ghoul":
+		heal(25, "Rad-scoured flesh knits itself shut.")
+	case "revenant":
+		heal(15, "You reach into the dead Grid and draw back a little of its cold life.")
+	case "vatborn":
+		heal(12, "You print a field stim from raw salvage and jab it home.")
+	case "dustkin":
+		coin := 5 + rand.Intn(11)
+		s.player.Gold += coin
+		s.line(fmt.Sprintf("You work the open pan and turn up something worth keeping. (+%d gold)", coin))
+		s.event(event.CharVitals, s.player.Vitals())
+	default:
+		s.line(ab.Desc + ".")
+	}
 }
 
 // roomAction finds an unresolved contextual action in the current room by verb.

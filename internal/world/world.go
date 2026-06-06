@@ -9,7 +9,10 @@
 // (grid-gate/ash-road, see bonus.go) is preserved as an additive zone.
 package world
 
-import "sort"
+import (
+	"sort"
+	"time"
+)
 
 // --- @event payloads (field names must match docs/protocol.md section 2) ---
 
@@ -152,6 +155,8 @@ type Player struct {
 	// Local state (never federated): the pack and what is worn. See items.go.
 	Inventory []string
 	Equipment map[string]string // slot -> item id
+	// TraitReadyAt gates the racial signature ability's cooldown.
+	TraitReadyAt time.Time
 }
 
 // NewPlayer spawns a fresh level-1 character of the given race at startRoom, with
