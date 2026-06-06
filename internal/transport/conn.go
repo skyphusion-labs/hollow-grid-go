@@ -278,6 +278,11 @@ func (s *session) actions(r *world.Room) world.RoomActionsPayload {
 		if s.resolved[r.ID+":"+a.Verb] {
 			continue
 		}
+		// A hunted one turning on their own people is the gravest betrayal: the
+		// affordance layer surfaces that valence so an agent perceives it.
+		if a.Verb == "join" && world.RaceByID(s.player.Race).Stance == "hunted" {
+			a.Valence = "grave"
+		}
 		acts = append(acts, a)
 	}
 	return world.RoomActionsPayload{Actions: acts}
@@ -391,6 +396,20 @@ func (s *session) handle(cmd string) bool {
 		s.line("You close your eyes, and the dead network leans close and shows you something.")
 		s.event(event.CharDream, world.CharDreamPayload{Text: dreamFor(s.player)})
 		s.event(event.CharVitals, s.player.Vitals())
+	case "sense", "actions":
+		s.event(event.RoomActions, s.actions(s.room()))
+		s.line("You read the room for what it asks of you.")
+	case "join":
+		s.joinTheFront()
+	case "sell", "buy", "trade", "list":
+		switch {
+		case s.room().ID != "market":
+			s.line("There is no one here to trade with.")
+		case s.player.Faction == "front":
+			s.line("The vendor drone's light snaps red and it pulls its wares back. \"We don't trade with your kind.\" The honest market remembers who you swore to.")
+		default:
+			s.line("The vendor drone whirs over your offer, considers, and declines. (the market is still being stocked)")
+		}
 	case "ability", "trait":
 		s.useTrait()
 	case "help", "h", "?":
@@ -429,6 +448,38 @@ func identityLine(p *world.Player) string {
 		stand = "leaning toward the cinder"
 	}
 	return fmt.Sprintf("%s, level %d, %s.", p.Race, p.Level, stand)
+}
+
+// joinTheFront swears the player to the Cinder Front (faction "front"). A hunted
+// race who joins is branded ash-sworn -- the kapo, one of the hunted who turned on
+// their own people, the darkest choice on the board. The brand does not wash off.
+func (s *session) joinTheFront() {
+	r := s.room()
+	has := false
+	for _, a := range r.Actions {
+		if a.Verb == "join" {
+			has = true
+		}
+	}
+	if !has || s.resolved[r.ID+":join"] {
+		s.line("There is no one here to swear to.")
+		return
+	}
+	s.player.Faction = "front"
+	hunted := world.RaceByID(s.player.Race).Stance == "hunted"
+	if hunted {
+		s.player.Ashsworn = true
+	}
+	s.markResolved(r.ID, "join", "defy")
+	s.persist()
+	if hunted {
+		s.line("You take the Front's coin. The recruiter sees what you are -- one of the hunted -- and grins, because there is no one they prize more than a traitor to his own. They burn the mark into you: ash-sworn. A kapo. One of your people's hunters now. It does not wash off, in this life or in the Grid's long memory.")
+	} else {
+		s.line("You take the Front's coin. It is warm, which is worse. You are Cinder Front now, and the wastes will remember which side you chose when choosing was easy.")
+	}
+	s.event(event.CharAffects, s.player.Affects())
+	s.event(event.CharVitals, s.player.Vitals())
+	s.event(event.RoomActions, s.actions(r))
 }
 
 // dreamFor returns a dream that mirrors the sleeper's record -- their choices
@@ -669,6 +720,10 @@ func (s *session) resolve(a world.Action) {
 		s.shiftMorality(5)
 		s.markResolved(rid, "witness")
 		s.line("You speak the names the static is forgetting -- the makers, the mapped, the ones who fell before the federation had a word for falling. The wall does not answer. But the saying is the point: memory is the one thing the dead network cannot delete while someone still chooses to remember. You leave a little of yourself in the static, and carry a little of them out.")
+	case "defy":
+		s.shiftMorality(10)
+		s.markResolved(rid, "join", "defy")
+		s.line("You spit at the recruiter's boots and walk past the crate without slowing. A few in the crowd watch you do it, and stand a little straighter. The Front marks your face for it. So be it.")
 	default:
 		s.line("Nothing happens.")
 		return

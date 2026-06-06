@@ -299,6 +299,53 @@ func TestSleepDeliversDream(t *testing.T) {
 	}
 }
 
+// readUntil reads messages until one contains want (the heartbeat interleaves
+// world.state, so a fixed read can land on the wrong message).
+func readUntil(t *testing.T, read func() string, want string) string {
+	t.Helper()
+	for i := 0; i < 8; i++ {
+		if msg := read(); strings.Contains(msg, want) {
+			return msg
+		}
+	}
+	t.Fatalf("never received a message containing %q", want)
+	return ""
+}
+
+// TestCinderFrontMoralArc: joining at the market brands faction "front" and the
+// market shuts you out; an elf who joins is the kapo -- the join affordance is
+// grave and the brand is ash-sworn, both on the structured channel.
+func TestCinderFrontMoralArc(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	read()
+	send("Turncoat")
+	read()
+	send("human")
+	read()
+	send("north") // -> Scrap Market, the recruiter
+	read()
+	send("join")
+	mustContain(t, "human join", readUntil(t, read, `"faction":"front"`), `"faction":"front"`)
+	send("sell scrap")
+	mustContain(t, "market refuses a collaborator", readUntil(t, read, "trade with your kind"), "trade with your kind")
+	done()
+
+	read2, send2, done2 := dial(t, newWorldServer(t))
+	defer done2()
+	read2()
+	send2("Kapo")
+	read2()
+	send2("elf") // the hunted
+	read2()
+	send2("north")
+	read2()
+	send2("sense")
+	mustContain(t, "grave moral affordance", readUntil(t, read2, "@event room.actions"),
+		`"kind":"moral"`, `"verb":"join"`, `"valence":"grave"`)
+	send2("join")
+	mustContain(t, "ash-sworn brand", readUntil(t, read2, "ash-sworn"), "ash-sworn", `"ashsworn":true`)
+}
+
 // TestHealth checks the liveness probe shape (protocol.md s1).
 func TestHealth(t *testing.T) {
 	ts := newWorldServer(t)
