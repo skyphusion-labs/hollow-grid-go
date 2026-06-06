@@ -96,6 +96,12 @@ type CharDiedPayload struct {
 	MaxHP       int    `json:"maxHp"`
 }
 
+// CharDreamPayload is emitted as char.dream: the Grid shows a sleeper a mirror of
+// their own record.
+type CharDreamPayload struct {
+	Text string `json:"text"`
+}
+
 // CharSheet is the canonical, federated character (docs/protocol.md s3): the Grid
 // owns it in federation; standalone persists it locally. Also the char.identity
 // payload (whoami).

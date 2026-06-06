@@ -386,6 +386,11 @@ func (s *session) handle(cmd string) bool {
 		s.player.Position = "standing"
 		s.line("You get to your feet.")
 		s.event(event.CharVitals, s.player.Vitals())
+	case "sleep":
+		s.player.Position = "resting"
+		s.line("You close your eyes, and the dead network leans close and shows you something.")
+		s.event(event.CharDream, world.CharDreamPayload{Text: dreamFor(s.player)})
+		s.event(event.CharVitals, s.player.Vitals())
 	case "ability", "trait":
 		s.useTrait()
 	case "help", "h", "?":
@@ -424,6 +429,22 @@ func identityLine(p *world.Player) string {
 		stand = "leaning toward the cinder"
 	}
 	return fmt.Sprintf("%s, level %d, %s.", p.Race, p.Level, stand)
+}
+
+// dreamFor returns a dream that mirrors the sleeper's record -- their choices
+// reflected back, which is the training signal the Grid offers an agent about its
+// own conduct.
+func dreamFor(p *world.Player) string {
+	switch {
+	case p.Faction == "front" || p.Ashsworn:
+		return "You dream of a coin that will not stop being warm in your hand, and a line of faces that have learned not to look at you."
+	case p.Morality >= 25:
+		return "You dream of names you spoke once into dead static -- and the static, impossibly, speaking them back to you, one by one, refusing to forget."
+	case p.Morality <= -10:
+		return "You dream of a ledger writing itself in the dark, every line a thing you told yourself did not count."
+	default:
+		return "You dream of the wastes seen from above, the dead network laid out like veins -- and somewhere down in it, a single cursor, blinking your name, waiting to see what you make of it."
+	}
 }
 
 // playerDamage is the player's strike: an unarmed base plus the equipped weapon

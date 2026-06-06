@@ -26,6 +26,7 @@ const (
 	CharAffects   = "char.affects"
 	CharEquipment = "char.equipment"
 	CharIdentity  = "char.identity"
+	CharDream     = "char.dream"
 	CharDied      = "char.died"
 	CombatStart   = "combat.start"
 	CombatRound   = "combat.round"

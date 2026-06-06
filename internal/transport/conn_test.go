@@ -276,6 +276,29 @@ func TestLivingWorldAndRest(t *testing.T) {
 	}
 }
 
+// TestSleepDeliversDream: sleep emits char.dream (a mirror of the record).
+func TestSleepDeliversDream(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	read()
+	send("Dreamer")
+	read()
+	send("human")
+	read()
+
+	send("sleep")
+	dreamt := false
+	for i := 0; i < 3 && !dreamt; i++ {
+		if strings.Contains(read(), "@event char.dream") {
+			dreamt = true
+		}
+	}
+	if !dreamt {
+		t.Fatal("sleep did not deliver a char.dream")
+	}
+}
+
 // TestHealth checks the liveness probe shape (protocol.md s1).
 func TestHealth(t *testing.T) {
 	ts := newWorldServer(t)
