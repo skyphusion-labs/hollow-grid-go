@@ -21,6 +21,7 @@ const Prefix = "@event "
 // Canonical event names (a growing subset of the protocol vocabulary).
 const (
 	RoomInfo    = "room.info"
+	RoomActions = "room.actions"
 	CharVitals  = "char.vitals"
 	CharAffects = "char.affects"
 	CharDied    = "char.died"
