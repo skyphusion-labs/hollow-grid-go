@@ -36,7 +36,7 @@ func newWorldServer(t *testing.T) *httptest.Server {
 // dial opens a player WebSocket and returns read/send/close helpers.
 func dial(t *testing.T, ts *httptest.Server) (read func() string, send func(string), closeConn func()) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
 	c, _, err := websocket.Dial(ctx, wsURL, nil)
 	if err != nil {
@@ -201,6 +201,43 @@ func TestMobsConsiderLook(t *testing.T) {
 
 	send("look rat")
 	mustContain(t, "look rat", read(), "rodent")
+}
+
+// TestCombatKillsTheGlowRat: attack starts combat (combat.start + inCombat), the
+// fight resolves over combat ticks (combat.round), and the kill ends it
+// (combat.end killed, inCombat false) with the player surviving.
+func TestCombatKillsTheGlowRat(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	read()
+	send("Brawler")
+	read()
+	send("human")
+	read()
+	send("down")
+	read() // tunnels, where the rat is
+
+	send("attack rat")
+	mustContain(t, "combat start", read(), "@event combat.start", `"name":"a glow-rat"`, `"inCombat":true`)
+
+	sawRound, killed := false, false
+	for i := 0; i < 6 && !killed; i++ {
+		msg := read()
+		if strings.Contains(msg, "@event combat.round") {
+			sawRound = true
+		}
+		if strings.Contains(msg, "@event combat.end") && strings.Contains(msg, `"result":"killed"`) {
+			killed = true
+			mustContain(t, "post-kill vitals", msg, `"inCombat":false`)
+		}
+	}
+	if !sawRound {
+		t.Fatal("no combat.round event was emitted")
+	}
+	if !killed {
+		t.Fatal("the glow-rat was not killed")
+	}
 }
 
 // TestHealth checks the liveness probe shape (protocol.md s1).

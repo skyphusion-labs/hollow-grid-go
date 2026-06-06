@@ -127,18 +127,62 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store
 		return
 	}
 
+	// Read commands on a goroutine so the main loop can also service combat
+	// ticks. All session/player state stays owned by this single loop -- commands
+	// and ticks are handled one at a time -- so no locking is needed.
+	cmds := make(chan string)
+	readerDone := make(chan struct{})
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		defer close(readerDone)
+		for {
+			cmd, err := s.read(ctx)
+			if err != nil {
+				return
+			}
+			select {
+			case cmds <- cmd:
+			case <-stop:
+				return
+			}
+		}
+	}()
+
+	var tick *time.Ticker
+	defer func() {
+		if tick != nil {
+			tick.Stop()
+		}
+	}()
 	for {
-		cmd, err := s.read(ctx)
-		if err != nil {
+		var tc <-chan time.Time
+		if tick != nil {
+			tc = tick.C
+		}
+		select {
+		case <-readerDone:
 			log.Info("player disconnected", "name", name)
 			s.persist()
 			return
+		case cmd := <-cmds:
+			quit := s.handle(cmd)
+			_ = s.flush(ctx)
+			if quit {
+				s.persist()
+				return
+			}
+		case <-tc:
+			s.combatRound()
+			_ = s.flush(ctx)
 		}
-		quit := s.handle(cmd)
-		_ = s.flush(ctx)
-		if quit {
-			s.persist()
-			return
+		// Start/stop the combat ticker to match the player's combat state.
+		switch {
+		case s.player.Target != nil && tick == nil:
+			tick = time.NewTicker(1500 * time.Millisecond)
+		case s.player.Target == nil && tick != nil:
+			tick.Stop()
+			tick = nil
 		}
 	}
 }
@@ -254,6 +298,18 @@ func (s *session) handle(cmd string) bool {
 		} else {
 			s.line("There's nothing like that here to size up.")
 		}
+	case "attack", "kill", "k":
+		switch m := s.room().Mob(arg); {
+		case s.player.Target != nil:
+			s.line("You're already in a fight.")
+		case m == nil:
+			s.line("There's nothing like that here to attack.")
+		default:
+			s.player.Target = m
+			s.event(event.CombatStart, world.CombatStartPayload{Mob: m.ID, Name: m.Name})
+			s.line("You throw yourself at " + m.Name + ".")
+			s.event(event.CharVitals, s.player.Vitals())
+		}
 	case "whoami", "identity":
 		s.event(event.CharIdentity, s.player.Sheet())
 		s.line("The Grid reads you back: " + identityLine(s.player))
@@ -344,6 +400,89 @@ func identityLine(p *world.Player) string {
 		stand = "leaning toward the cinder"
 	}
 	return fmt.Sprintf("%s, level %d, %s.", p.Race, p.Level, stand)
+}
+
+// playerDamage is the player's strike: an unarmed base plus the equipped weapon
+// and the race's bite.
+func (s *session) playerDamage() int {
+	dmg := 5
+	if wid, ok := s.player.Equipment["weapon"]; ok {
+		if it, ok := world.ItemByID(wid); ok {
+			dmg += it.Damage
+		}
+	}
+	return dmg + world.RaceByID(s.player.Race).Damage
+}
+
+// playerArmor soaks incoming damage: worn armor plus the race's plate.
+func (s *session) playerArmor() int {
+	a := world.RaceByID(s.player.Race).Armor
+	for _, slot := range []string{"head", "body", "hands", "feet"} {
+		if id, ok := s.player.Equipment[slot]; ok {
+			if it, ok := world.ItemByID(id); ok {
+				a += it.Armor
+			}
+		}
+	}
+	return a
+}
+
+// removeMob takes a (dead) mob out of the current room.
+func (s *session) removeMob(m *world.Mob) {
+	r := s.room()
+	for i, mm := range r.Mobs {
+		if mm == m {
+			r.Mobs = append(r.Mobs[:i], r.Mobs[i+1:]...)
+			return
+		}
+	}
+}
+
+// combatRound resolves one exchange against the player's target, driven by the
+// combat ticker in handleConn. The player strikes first; a kill ends the fight,
+// a lethal counter respawns the player at the Nexus. The whole fight plays out on
+// the combat.* channel so a client/agent reads it as data.
+func (s *session) combatRound() {
+	m := s.player.Target
+	if m == nil {
+		return
+	}
+	pd := s.playerDamage()
+	m.HP -= pd
+	if m.HP < 0 {
+		m.HP = 0
+	}
+	md := 0
+	if m.HP > 0 {
+		md = m.Damage - s.playerArmor()
+		if md < 0 {
+			md = 0
+		}
+		s.player.HP -= md
+	}
+	s.event(event.CombatRound, world.CombatRoundPayload{
+		Mob: m.ID, MobHP: m.HP, MobMaxHP: m.MaxHP, PlayerDmg: pd, MobDmg: md, HP: s.player.HP,
+	})
+	switch {
+	case m.HP <= 0:
+		s.removeMob(m)
+		s.player.Target = nil
+		s.player.XP += 5
+		s.event(event.CombatEnd, world.CombatEndPayload{Mob: m.ID, Result: "killed"})
+		s.line("You put " + m.Name + " down. The tunnels go quiet.")
+		s.event(event.CharVitals, s.player.Vitals())
+	case s.player.HP <= 0:
+		s.player.Target = nil
+		s.player.HP = s.player.MaxHP
+		s.player.RoomID = s.w.Start().ID
+		s.event(event.CombatEnd, world.CombatEndPayload{Mob: m.ID, Result: "died"})
+		s.event(event.CharDied, world.CharDiedPayload{RespawnRoom: s.w.Start().ID, HP: s.player.HP, MaxHP: s.player.MaxHP})
+		s.line("The dark takes you -- and the Grid, stubborn, reknits you at the Cracked Nexus.")
+		s.event(event.CharVitals, s.player.Vitals())
+		s.sendScene()
+	default:
+		s.event(event.CharVitals, s.player.Vitals())
+	}
 }
 
 // considerLine sizes up a mob relative to the player (src/world.ts consider).

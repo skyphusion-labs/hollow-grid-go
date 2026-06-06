@@ -73,6 +73,29 @@ type WorldStatePayload struct {
 	Weather string `json:"weather"`
 }
 
+// Combat @event payloads (protocol.md s2).
+type CombatStartPayload struct {
+	Mob  string `json:"mob"`
+	Name string `json:"name"`
+}
+type CombatRoundPayload struct {
+	Mob       string `json:"mob"`
+	MobHP     int    `json:"mobHp"`
+	MobMaxHP  int    `json:"mobMaxHp"`
+	PlayerDmg int    `json:"playerDmg"`
+	MobDmg    int    `json:"mobDmg"`
+	HP        int    `json:"hp"`
+}
+type CombatEndPayload struct {
+	Mob    string `json:"mob"`
+	Result string `json:"result"` // killed | died | fled
+}
+type CharDiedPayload struct {
+	RespawnRoom string `json:"respawnRoom"`
+	HP          int    `json:"hp"`
+	MaxHP       int    `json:"maxHp"`
+}
+
 // CharSheet is the canonical, federated character (docs/protocol.md s3): the Grid
 // owns it in federation; standalone persists it locally. Also the char.identity
 // payload (whoami).
@@ -178,6 +201,8 @@ type Player struct {
 	Equipment map[string]string // slot -> item id
 	// TraitReadyAt gates the racial signature ability's cooldown.
 	TraitReadyAt time.Time
+	// Target is the mob this player is fighting (nil = not in combat).
+	Target *Mob
 }
 
 // NewPlayer spawns a fresh level-1 character of the given race at startRoom, with
@@ -224,9 +249,13 @@ func (p *Player) Sheet() CharSheet {
 
 // Vitals renders the player as a char.vitals payload.
 func (p *Player) Vitals() CharVitalsPayload {
+	pos := "standing"
+	if p.Target != nil {
+		pos = "fighting"
+	}
 	return CharVitalsPayload{
 		HP: p.HP, MaxHP: p.MaxHP, Level: p.Level, XP: p.XP, Gold: p.Gold,
-		Room: p.RoomID, Position: "standing",
+		Room: p.RoomID, InCombat: p.Target != nil, Position: pos,
 	}
 }
 
