@@ -1,0 +1,13 @@
+# keep the build context small and reproducible
+.git
+.gitignore
+/world
+/bin/
+/data/
+*.log
+*.test
+*.out
+Dockerfile
+.dockerignore
+docs/
+README.md
