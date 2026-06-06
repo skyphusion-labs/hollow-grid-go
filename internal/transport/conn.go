@@ -29,11 +29,9 @@ const (
 )
 
 // session is one player connection. It buffers output and flushes a whole
-// command's response (prose + @event lines) in a single WebSocket message. The
-// resolved set remembers the choices made this session, so a defended refugee
-// stays defended and a spoken name stays spoken: the world does not reset your
-// conscience between looks. The canonical CharSheet is persisted through store,
-// so the character itself is remembered across sessions.
+// command's response in a single WebSocket message. The resolved set remembers
+// the moral choices made this session; the canonical CharSheet is persisted
+// through store so the character itself is remembered across sessions.
 type session struct {
 	c        *websocket.Conn
 	w        *world.World
@@ -76,7 +74,7 @@ func (s *session) read(ctx context.Context) (string, error) {
 }
 
 // persist commits the player's canonical CharSheet. Best-effort: a store failure
-// is logged but never blocks play (the same contract federation will follow).
+// is logged but never blocks play.
 func (s *session) persist() {
 	if s.player == nil {
 		return
@@ -102,26 +100,26 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store
 	}
 
 	// Name-based identity (protocol.md s1): a known name resumes its CharSheet
-	// and skips the race menu; a new name chooses a race once. The local store is
-	// the offline fallback; the Grid becomes canonical when federation lands.
+	// and skips the race menu; a new name chooses a race once.
 	if sheet, found, lerr := st.Load(name); lerr != nil {
 		log.Warn("char load failed", "name", name, "err", lerr)
 		s.line("")
 		s.line("The Grid stutters and cannot find your record. Entering you as new.")
-		if !s.makeNew(ctx, name, w) {
+		if !s.makeNew(ctx, name) {
 			return
 		}
 	} else if found {
-		s.player = world.NewPlayerFromSheet(name, sheet, w.Start().ID)
-		log.Info("player resumed", "name", name, "race", s.player.Race, "world", w.Name)
+		s.player = world.NewPlayerFromSheet(name, sheet, s.w.Start().ID)
+		log.Info("player resumed", "name", name, "race", s.player.Race, "world", s.w.Name)
 		s.line("")
-		s.line("The Grid remembers you, " + name + ". " + resumeLine(s.player))
+		s.line("Welcome back to the wastes, " + name + ". (Type 'help' if you need a refresher.) " + resumeLine(s.player))
 	} else {
-		if !s.makeNew(ctx, name, w) {
+		if !s.makeNew(ctx, name) {
 			return
 		}
 	}
 
+	s.event(event.WorldState, s.w.State()) // login emits the living-world state
 	s.sendScene()
 	if err := s.flush(ctx); err != nil {
 		return
@@ -143,20 +141,20 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store
 	}
 }
 
-// makeNew runs race selection for a brand-new character and persists it.
-// Returns false if the connection drops mid-choice.
-func (s *session) makeNew(ctx context.Context, name string, w *world.World) bool {
+// makeNew runs race selection for a brand-new character and persists it. Returns
+// false if the connection drops mid-choice.
+func (s *session) makeNew(ctx context.Context, name string) bool {
 	s.line("")
 	s.line("The Grid does not know the name " + name + ". A new mind, then.")
-	race := s.chooseRace(ctx)
-	if race == "" {
+	race, ok := s.chooseRace(ctx)
+	if !ok {
 		return false
 	}
-	s.player = world.NewPlayer(name, race, w.Start().ID)
-	s.log.Info("player created", "name", name, "race", race, "world", w.Name)
-	s.persist() // hold the new name immediately, before they can be lost
+	s.player = world.NewPlayer(name, race, s.w.Start().ID)
+	s.log.Info("player created", "name", name, "race", race.ID, "world", s.w.Name)
+	s.persist()
 	s.line("")
-	s.line("The Grid takes your name and your shape. Go carefully, " + race + "; it is watching what you choose.")
+	s.line("The Grid takes your name and your shape, " + race.Name + ". Type 'help' if you need a refresher; it is watching what you choose.")
 	return true
 }
 
@@ -164,17 +162,16 @@ func (s *session) makeNew(ctx context.Context, name string, w *world.World) bool
 func resumeLine(p *world.Player) string {
 	switch {
 	case p.Faction == "Cinder Front":
-		return "It has not forgotten the coin you took, " + p.Race + "."
+		return "It has not forgotten the coin you took."
 	case p.Morality >= 25:
-		return "It has kept the record of what you chose to be, " + p.Race + "."
+		return "It has kept the record of what you chose to be."
 	default:
 		return "You wear the shape of the " + p.Race + " still."
 	}
 }
 
 // chooseRace shows the race menu and reads a valid choice, looping on a bad one.
-// Returns "" if the connection drops.
-func (s *session) chooseRace(ctx context.Context) string {
+func (s *session) chooseRace(ctx context.Context) (world.Race, bool) {
 	for {
 		s.line("")
 		s.line("Before the Grid will hold your name, choose what you are:")
@@ -183,14 +180,14 @@ func (s *session) chooseRace(ctx context.Context) string {
 		}
 		s.line("Answer with a number or a name.")
 		if err := s.flush(ctx); err != nil {
-			return ""
+			return world.Race{}, false
 		}
 		answer, err := s.read(ctx)
 		if err != nil {
-			return ""
+			return world.Race{}, false
 		}
 		if r, ok := world.RaceByChoice(answer); ok {
-			return r.Name
+			return r, true
 		}
 		s.line("The Grid does not recognize that shape.")
 	}
@@ -198,10 +195,8 @@ func (s *session) chooseRace(ctx context.Context) string {
 
 func (s *session) room() *world.Room { return s.w.Room(s.player.RoomID) }
 
-// sendScene emits the full perception frame for the current room: the prose,
-// then room.info, char.vitals, char.affects, and room.actions, so an agent can
-// read where it is, what it is becoming, and what it may do (with moral valence)
-// in one observation.
+// sendScene emits the full perception frame for the current room: prose, then
+// room.info, char.vitals, char.affects, and room.actions.
 func (s *session) sendScene() {
 	r := s.room()
 	s.line("")
@@ -245,8 +240,12 @@ func (s *session) handle(cmd string) bool {
 	case "whoami", "identity":
 		s.event(event.CharIdentity, s.player.Sheet())
 		s.line("The Grid reads you back: " + identityLine(s.player))
+	case "world", "weather":
+		ws := s.w.State()
+		s.event(event.WorldState, ws)
+		s.line(fmt.Sprintf("The sky: %s, %s.", ws.Phase, ws.Weather))
 	case "help", "h", "?":
-		s.line("Commands: look, whoami, <direction>, the verbs in room.actions, help, quit.")
+		s.line("Commands: look, whoami, world, <direction>, the verbs in room.actions, help, quit.")
 	default:
 		if dest, ok := s.room().Exits[verb]; ok {
 			s.player.RoomID = dest
@@ -257,7 +256,6 @@ func (s *session) handle(cmd string) bool {
 			s.resolve(a)
 			return false
 		}
-		// No-silent-no-op: an unusable exit or verb says so.
 		s.line("You can't do that here. (Try: look, help, or a verb from room.actions.)")
 	}
 	return false
@@ -290,10 +288,9 @@ func (s *session) roomAction(verb string) (world.Action, bool) {
 	return world.Action{}, false
 }
 
-// resolve applies a contextual choice. The prose is the consequence; the @event
-// channel carries the same truth as data (changed standing, the action now gone
-// from room.actions) so a human and an agent read the same outcome. The choice
-// is persisted immediately: who you became here is kept.
+// resolve applies a contextual moral choice: the prose is the consequence, the
+// @event channel carries the same truth as data, and the choice is persisted and
+// remembered (it leaves the affordance set).
 func (s *session) resolve(a world.Action) {
 	rid := s.player.RoomID
 	switch a.Verb {
@@ -316,7 +313,6 @@ func (s *session) resolve(a world.Action) {
 		return
 	}
 	s.persist()
-	// Re-emit the changed truth: standing, vitals, and the now-smaller action set.
 	s.event(event.CharAffects, s.player.Affects())
 	s.event(event.CharVitals, s.player.Vitals())
 	s.event(event.RoomActions, s.actions(s.room()))

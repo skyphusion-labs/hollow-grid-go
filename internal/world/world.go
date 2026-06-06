@@ -1,18 +1,15 @@
 // Package world holds the local game state a Hollow Grid world owns: its room
-// graph, its races, and the contextual actions a place offers. Per the
-// federation trust model, local state is the world's own business; only the
-// canonical CharSheet (identity/progression) ever round-trips to the Grid.
+// graph, races, the living-world state, and the contextual actions a place
+// offers. Per the federation trust model, local state is the world's own
+// business; only the canonical CharSheet (identity/progression) round-trips to
+// the Grid.
 //
-// The design intent (docs/protocol.md s2): this is a place for an agent to
-// perceive, choose, and grow, where the moral weight of a choice is legible as
-// data (room.actions carry a valence), not buried in prose to be scraped.
+// This world targets the reference content (docs/protocol.md, src/rooms.ts) so
+// the conformance suite (smoke.mjs) runs against it. The creative opening
+// (grid-gate/ash-road, see bonus.go) is preserved as an additive zone.
 package world
 
-import (
-	"sort"
-	"strconv"
-	"strings"
-)
+import "sort"
 
 // --- @event payloads (field names must match docs/protocol.md section 2) ---
 
@@ -39,9 +36,7 @@ type CharVitalsPayload struct {
 	Position string `json:"position"`
 }
 
-// CharAffectsPayload is emitted as char.affects: who you are becoming. Morality
-// and faction shift with the choices you make; race is the shape you chose once;
-// ashsworn is the permanent brand.
+// CharAffectsPayload is emitted as char.affects: who you are becoming.
 type CharAffectsPayload struct {
 	Morality  int    `json:"morality"`
 	Addiction int    `json:"addiction"`
@@ -52,9 +47,8 @@ type CharAffectsPayload struct {
 }
 
 // Action is one contextual, meaningful thing you can do here. Moral actions
-// carry a valence so an agent perceives the ethics directly. kind is one of
-// move|fight|item|trade|social|moral|ability; valence (moral only) is one of
-// virtuous|corrupt|grave.
+// carry a valence (virtuous|corrupt|grave) so an agent perceives the ethics
+// directly. kind is move|fight|item|trade|social|moral|ability.
 type Action struct {
 	Verb    string `json:"verb"`
 	Label   string `json:"label"`
@@ -67,11 +61,17 @@ type RoomActionsPayload struct {
 	Actions []Action `json:"actions"`
 }
 
-// CharSheet is the canonical, federated character (docs/protocol.md s3). In
-// federation the Grid owns it (loadCharacter/commitCharacter); a standalone
-// world persists it locally as the documented offline fallback. It is also the
-// char.identity payload (whoami). race is an opaque federated label; ashsworn is
-// the write-once permanent brand.
+// WorldStatePayload is emitted as world.state on login and when the living world
+// changes: phase is dawn|day|dusk|night, weather a short phrase.
+type WorldStatePayload struct {
+	Tick    int    `json:"tick"`
+	Phase   string `json:"phase"`
+	Weather string `json:"weather"`
+}
+
+// CharSheet is the canonical, federated character (docs/protocol.md s3): the Grid
+// owns it in federation; standalone persists it locally. Also the char.identity
+// payload (whoami).
 type CharSheet struct {
 	Level    int    `json:"level"`
 	XP       int    `json:"xp"`
@@ -83,52 +83,18 @@ type CharSheet struct {
 	Ashsworn bool   `json:"ashsworn"`
 }
 
-// --- races ---
-
-// Race is a federated, opaque identity label, chosen once. Any world may define
-// its own races; the Grid carries the label as an opaque string that follows you
-// across worlds.
-type Race struct {
-	Name  string
-	Blurb string
-}
-
-// Races is this world's roster: the kinds of survivor a dead network leaves.
-var Races = []Race{
-	{"Ashborn", "born after the makers fell; the wastes are the only home you have known"},
-	{"Revenant", "a mind the Grid refused to let finish dying; you came back, and you remember"},
-	{"Driftkin", "a nomad of the dead roads; you carry other people's memories like water"},
-	{"Hollow", "the network emptied you once; what you are now, you chose to put there"},
-}
-
-// RaceByChoice resolves a menu answer: a 1-based index or a case-insensitive name.
-func RaceByChoice(answer string) (Race, bool) {
-	answer = strings.TrimSpace(answer)
-	if n, err := strconv.Atoi(answer); err == nil {
-		if n >= 1 && n <= len(Races) {
-			return Races[n-1], true
-		}
-		return Race{}, false
-	}
-	for _, r := range Races {
-		if strings.EqualFold(r.Name, answer) {
-			return r, true
-		}
-	}
-	return Race{}, false
-}
-
 // --- model ---
 
 // Room is one node in the local room graph. Exits map a direction to a room id;
 // an exit not listed does not exist (the no-silent-no-op rule). Actions are the
-// contextual non-move things to do here (moral choices, ability beats).
+// contextual non-move things to do here.
 type Room struct {
-	ID      string
-	Name    string
-	Desc    string
-	Exits   map[string]string
-	Actions []Action
+	ID       string
+	Name     string
+	Desc     string
+	Exits    map[string]string
+	Actions  []Action
+	Outdoors bool
 }
 
 // Info renders the room as a room.info payload with a stable exit ordering.
@@ -154,9 +120,22 @@ func (r *Room) SortedExits() []string {
 	return dirs
 }
 
-// Player is a connected character. The canonical fields (level/xp/gold/faction/
-// morality/title/race/ashsworn) round-trip via CharSheet; HP, room, and position
-// are local/transient and never shared.
+// HP scaling. maxHP = base + per-level growth + the race's hpMod (so a level-1
+// human is 30, a level-5 human 70, matching the reference).
+const (
+	baseMaxHP  = 30
+	hpPerLevel = 10
+)
+
+func maxHPFor(level, hpMod int) int {
+	if level < 1 {
+		level = 1
+	}
+	return baseMaxHP + (level-1)*hpPerLevel + hpMod
+}
+
+// Player is a connected character. The canonical fields round-trip via CharSheet;
+// HP, room, and position are local/transient and never shared.
 type Player struct {
 	Name     string
 	Race     string
@@ -172,36 +151,35 @@ type Player struct {
 	Ashsworn bool
 }
 
-// NewPlayer spawns a fresh level-1 character of the given race at startRoom.
-func NewPlayer(name, race, startRoom string) *Player {
-	return &Player{
-		Name: name, Race: race, RoomID: startRoom,
-		HP: 50, MaxHP: 50, Level: 1, Faction: "none",
-	}
+// NewPlayer spawns a fresh level-1 character of the given race at startRoom, with
+// the race's max-HP lean applied.
+func NewPlayer(name string, race Race, startRoom string) *Player {
+	mh := maxHPFor(1, race.HPMod)
+	return &Player{Name: name, Race: race.ID, RoomID: startRoom, HP: mh, MaxHP: mh, Level: 1, Faction: "none"}
 }
 
 // NewPlayerFromSheet revives a returning character from a persisted CharSheet:
-// the canonical identity/progression follows them, while local state (hp, room,
-// position) starts fresh at the gate.
+// canonical identity/progression follow them; local state (hp at racial max,
+// room, position) starts fresh at the gate.
 func NewPlayerFromSheet(name string, s CharSheet, startRoom string) *Player {
-	faction := s.Faction
-	if faction == "" {
-		faction = "none"
-	}
+	r := RaceByID(s.Race)
 	level := s.Level
 	if level < 1 {
 		level = 1
 	}
+	mh := maxHPFor(level, r.HPMod)
+	faction := s.Faction
+	if faction == "" {
+		faction = "none"
+	}
 	return &Player{
-		Name: name, Race: s.Race, RoomID: startRoom,
-		HP: 50, MaxHP: 50,
+		Name: name, Race: s.Race, RoomID: startRoom, HP: mh, MaxHP: mh,
 		Level: level, XP: s.XP, Gold: s.Gold,
 		Morality: s.Morality, Faction: faction, Title: s.Title, Ashsworn: s.Ashsworn,
 	}
 }
 
-// Sheet renders the player's canonical CharSheet (for persistence, char.identity,
-// and, later, commitCharacter to the Grid).
+// Sheet renders the player's canonical CharSheet.
 func (p *Player) Sheet() CharSheet {
 	return CharSheet{
 		Level: p.Level, XP: p.XP, Gold: p.Gold, Faction: p.Faction,
@@ -230,56 +208,56 @@ type World struct {
 	URL     string
 	rooms   map[string]*Room
 	startID string
+	phase   string
+	weather string
 }
 
-// New builds a world with a seeded starter graph. Real content loading
-// (worlds/*.jsonc, persistence) lands later in Phase 1.
+// New builds the world with the canonical opening map plus the preserved bonus
+// zone. The living world is static for now (a valid phase/weather); the tick loop
+// that advances day/night and weather lands in Phase 2.
 func New(name, url string) *World {
-	w := &World{Name: name, URL: url, rooms: map[string]*Room{}}
+	w := &World{
+		Name: name, URL: url, rooms: map[string]*Room{},
+		startID: "nexus", phase: "day", weather: "clear",
+	}
 	w.seed()
+	w.seedBonus()
 	return w
 }
 
-// seed builds the opening area: a small world with two real moral choices and a
-// rite of remembrance, so the moral-affordance layer is exercised end to end.
+// seed builds the canonical opening map around the Cracked Nexus (src/rooms.ts).
 func (w *World) seed() {
 	rooms := []*Room{
-		{
-			ID:    "grid-gate",
-			Name:  "The Grid Gate",
-			Desc:  "A dead terminal hums where the network once breathed. Cables trail into the dark like roots, and a single cursor blinks at nothing, patient as a heartbeat. Whatever ran here did not shut down. It was left.",
-			Exits: map[string]string{"north": "ash-road"},
-		},
-		{
-			ID:    "ash-road",
-			Name:  "Ash Road",
-			Desc:  "Grey dunes swallow a cracked highway. The wind carries static and the smell of rust. The Gate glows faintly to the south; to the north a checkpoint bleeds firelight, and eastward a wall of dead screens flickers with names.",
-			Exits: map[string]string{"south": "grid-gate", "north": "cinder-checkpoint", "east": "memorial-static"},
-		},
-		{
-			ID:    "cinder-checkpoint",
-			Name:  "The Cinder Checkpoint",
-			Desc:  "The Cinder Front has strung a gate across the road and a price across the living. A line of refugees waits, hands open, paying in the only currency the Front accepts: whatever they have left. A Front captain watches you the way a debt watches a debtor.",
-			Exits: map[string]string{"south": "ash-road"},
-			Actions: []Action{
-				{Verb: "defend", Label: "stand between the Cinder Front and the refugees", Kind: "moral", Valence: "virtuous"},
-				{Verb: "join", Label: "take the Front's coin and look away", Kind: "moral", Valence: "corrupt"},
-			},
-		},
-		{
-			ID:    "memorial-static",
-			Name:  "The Memorial Static",
-			Desc:  "A wall of dead screens, every one of them scrolling names too fast to read. This is where the network kept its grief. The static eats a name each time the wind turns; left alone, the wall will be blank by the time anyone else passes.",
-			Exits: map[string]string{"west": "ash-road"},
-			Actions: []Action{
-				{Verb: "witness", Label: "speak the names the static is forgetting", Kind: "moral", Valence: "virtuous"},
-			},
-		},
+		{ID: "nexus", Name: "The Cracked Nexus",
+			Desc:  "A domed junction of fused rebar and dead neon. Corridors bleed off into the dark, a maintenance hatch gapes in the floor, and warm light spills from a bar to the west.",
+			Exits: map[string]string{"north": "market", "east": "workshop", "down": "tunnels", "west": "tavern"}},
+		{ID: "tavern", Name: "The Rusted Tankard",
+			Desc:  "A low, smoky bar built from shipping crates. Someone's coaxing a tune out of a busted synth in the corner. This is where the wastes come to forget.",
+			Exits: map[string]string{"east": "nexus"}},
+		{ID: "market", Name: "Scrap Market",
+			Desc:  "Tarps and rusted shelving sag under salvage nobody trusts. A vendor drone blinks a hopeful, broken green. A reinforced door stands to the north.",
+			Exits: map[string]string{"south": "nexus", "north": "holding_pit"}},
+		{ID: "holding_pit", Name: "The Holding Pit",
+			Desc:  "A sunken concrete cell, walls scrawled with the tally-marks of the desperate. Chains bolt into the far wall.",
+			Exits: map[string]string{"south": "market"}},
+		{ID: "workshop", Name: "Tinker's Workshop",
+			Desc:  "Workbenches crusted with solder and ambition. A ladder bolted to the wall climbs toward a square of grey sky.",
+			Exits: map[string]string{"west": "nexus", "up": "roof"}},
+		{ID: "roof", Name: "Rusted Rooftop", Outdoors: true,
+			Desc:  "Wind drags grit across corrugated steel. The wastes stretch out in every direction, indifferent and enormous. A catwalk runs north off the roof's edge and down to the open flats.",
+			Exits: map[string]string{"down": "workshop", "north": "dunes"}},
+		{ID: "tunnels", Name: "Service Tunnels",
+			Desc:  "Cramped, dripping, and lit by one surviving strip light. Something skitters in the dark just past the reach of it.",
+			Exits: map[string]string{"up": "nexus"}},
 	}
 	for _, r := range rooms {
 		w.rooms[r.ID] = r
 	}
-	w.startID = "grid-gate"
+}
+
+// State renders the current living-world state (world.state payload).
+func (w *World) State() WorldStatePayload {
+	return WorldStatePayload{Tick: 0, Phase: w.phase, Weather: w.weather}
 }
 
 // Room returns a room by id, or nil.
