@@ -1,16 +1,17 @@
-// CI/CD for hollow-grid-go (a Hollow Grid world server in Go), on the mindcrime
-// Jenkins.
+// CI/CD for hollow-grid-go (a Hollow Grid world server in Go).
 //
 // On every push: gofmt + go vet, unit tests, build the Docker image, and run the
 // upstream smoke conformance suite against the freshly-built container
 // (informational while the port is in progress, so a partial pass never reds the
-// build). On main, (re)deploy the container on this host.
+// build). Deploy is a separate, deliberate step (push + pin image on the target
+// host) -- the fleet build hosts are ephemeral agents, not the run target.
 //
-// Agent (mindcrime, user `jenkins`): go on PATH (/usr/local/bin/go -> goinstall),
-// docker usable directly, node for the smoke suite. The smoke suite is the local
-// the-hollow-grid checkout's smoke.mjs; the stage SKIPs cleanly if absent.
+// Agent: fleet `build` label (fugazi/jello/damaged). Go and Docker CLI are in
+// the agent image; the host Docker daemon is reached via the bind-mounted socket.
+// Smoke suite: cloned from skyphusion-labs/the-hollow-grid at HEAD alongside the
+// build checkout (no hardcoded host paths).
 pipeline {
-  agent any
+  agent { label 'build' }
 
   options {
     timestamps()
@@ -19,9 +20,7 @@ pipeline {
   }
 
   environment {
-    IMAGE = 'hollow-grid-go'
-    SMOKE = '/home/conrad/dev/the-hollow-grid/smoke.mjs'
-    PATH  = "/usr/local/bin:/home/conrad/goinstall/go/bin:${env.PATH}"
+    IMAGE = 'ghcr.io/skyphusion/hollow-grid-go'
   }
 
   stages {
@@ -49,8 +48,10 @@ pipeline {
       steps {
         sh '''
           set -e
-          if [ ! -f "$SMOKE" ]; then echo "SKIP: smoke suite not found at $SMOKE"; exit 0; fi
-          if ! command -v node >/dev/null 2>&1; then echo "SKIP: node not on PATH"; exit 0; fi
+          SMOKE_DIR=$(mktemp -d)
+          git clone --depth 1 https://github.com/skyphusion-labs/the-hollow-grid.git "$SMOKE_DIR" 2>/dev/null || true
+          SMOKE="$SMOKE_DIR/smoke.mjs"
+          if [ ! -f "$SMOKE" ]; then echo "SKIP: smoke suite not found"; exit 0; fi
           docker rm -f hgg-ci >/dev/null 2>&1 || true
           docker run -d --name hgg-ci -p 18790:8790 "$IMAGE:latest"
           for i in $(seq 1 20); do curl -sf localhost:18790/health >/dev/null 2>&1 && break; sleep 1; done
@@ -69,22 +70,31 @@ pipeline {
       }
     }
 
-    stage('Deploy') {
+    stage('Push (main)') {
+      // Push the built image to GHCR on main so the run target can pull it.
+      // Actual (re)deploy is a separate step: pull + restart on the target host.
       when { branch 'main' }
       steps {
-        sh '''
-          set -e
-          docker rm -f hollow-grid-go >/dev/null 2>&1 || true
-          docker run -d --restart unless-stopped --name hollow-grid-go \
-            -p 8790:8790 -v hollow-grid-go-data:/data "$IMAGE:latest"
-          echo "deployed hollow-grid-go on :8790 (named volume hollow-grid-go-data)"
-        '''
+        withCredentials([usernamePassword(
+          credentialsId: 'ghcr-skyphusion',
+          usernameVariable: 'GHCR_USER',
+          passwordVariable: 'GHCR_TOKEN',
+        )]) {
+          sh '''
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            docker push "$IMAGE:$GIT_COMMIT"
+            docker push "$IMAGE:latest"
+          '''
+        }
       }
     }
   }
 
   post {
-    always { sh 'docker rm -f hgg-ci >/dev/null 2>&1 || true' }
+    always {
+      sh 'docker rm -f hgg-ci >/dev/null 2>&1 || true'
+      sh 'docker logout ghcr.io || true'
+    }
     success { echo 'pipeline green' }
   }
 }
