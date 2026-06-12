@@ -20,7 +20,7 @@ pipeline {
   }
 
   environment {
-    IMAGE = 'ghcr.io/skyphusion/hollow-grid-go'
+    IMAGE = 'ghcr.io/skyphusion-labs/hollow-grid-go'
   }
 
   stages {
