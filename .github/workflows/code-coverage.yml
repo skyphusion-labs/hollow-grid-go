@@ -1,0 +1,71 @@
+name: Test and Native Code Coverage
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write      
+      code-quality: write    # Required for GitHub Enterprise Code Coverage API
+      pull-requests: write   # Allows appending the widget inside the PR
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: go.sum
+
+      - name: Setup Node.js (for Smoke Engine)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Clone Upstream Conformance Suite
+        run: |
+          git clone --depth 1 https://github.com/skyphusion-labs/the-hollow-grid.git upstream-mud
+          cd upstream-mud && npm install
+
+      - name: Run Go Unit Tests with Coverage
+        run: go test -v -coverprofile=unit.out -covermode=atomic ./...
+
+      - name: Build Instrumented Server Binary
+        run: go build -cover -o hollow-grid-server ./cmd/...
+
+      - name: Run E2E Smoke Conformance Suite
+        run: |
+          mkdir -p docoverage
+          export GOCOVERDIR=$(pwd)/docoverage
+          
+          ./hollow-grid-server &
+          SERVER_PID=$!
+          
+          timeout 10s bash -c 'until curl -sf http://localhost:8790/health; do sleep 1; done' || true
+          
+          MUD_URL=ws://localhost:8790/ws timeout 90s node upstream-mud/smoke.mjs || true
+          
+          kill -SIGTERM $SERVER_PID || kill -9 $SERVER_PID
+          sleep 2
+
+      - name: Process Binary Telemetry
+        run: go tool covdata textfmt -i=docoverage -o=smoke.out
+
+      - name: Merge Coverage Matrices
+        run: |
+          echo "mode: atomic" > coverage.out
+          grep -h -v "^mode:" unit.out smoke.out >> coverage.out || true
+
+      - name: Upload coverage report
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-code-coverage@v1
+        with:
+          file: ./coverage.out
+          language: go
