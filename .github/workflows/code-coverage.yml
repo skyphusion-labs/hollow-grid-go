@@ -1,64 +1,71 @@
-            - name: Pipery Go CI
-  # You may pin to the exact commit or the version.
-  # uses: pipery-dev/golang-ci@fd0374debcf0f9e2f90bb03797645c17f5499920
-  uses: pipery-dev/golang-ci@v1
-  with:
-    # Path to the project source tree the action should operate on.
-    project_path: # optional, default is .
-    # Path to Pipery config file.
-    config_file: # optional, default is .pipery/config.yaml
-    # Go version to use.
-    go_version: # optional, default is 1.22
-    # Skip SAST step.
-    skip_sast: # optional, default is false
-    # Skip SCA step.
-    skip_sca: # optional, default is false
-    # Skip lint step.
-    skip_lint: # optional, default is false
-    # Skip build step.
-    skip_build: # optional, default is false
-    # Go package path for tests (e.g. ./pkg/...). Defaults to ./...
-    tests_path: # optional, default is ./...
-    # Comma or whitespace separated GOOS/GOARCH targets for cross-platform compilation, e.g. linux/amd64,darwin/arm64,windows/amd64. Empty builds the host platform.
-    target_platforms: # optional, default is 
-    # Skip test step.
-    skip_test: # optional, default is false
-    # Skip versioning step.
-    skip_versioning: # optional, default is false
-    # Skip packaging step.
-    skip_packaging: # optional, default is false
-    # Skip release step.
-    skip_release: # optional, default is false
-    # Skip reintegration step.
-    skip_reintegration: # optional, default is false
-    # Version bump type: patch, minor, or major.
-    version_bump: # optional, default is patch
-    # GitHub token for release and reintegration steps.
-    github_token: # optional, default is 
-    # Path to the JSONL log file written during the run.
-    log_file: # optional, default is pipery.jsonl
-    # Container registry for packaging.
-    registry: # optional, default is ghcr.io
-    # Container image name.
-    image_name: # optional, default is 
-    # Build and push a Docker image for the application.
-    release_docker_image: # optional, default is false
-    # Docker registry host used for login and image prefix.
-    docker_registry: # optional, default is ghcr.io
-    # Docker image name without tag. Defaults to image_name, then the GitHub repository.
-    docker_image: # optional, default is 
-    # Comma, space, or newline separated Docker tags. Defaults to sha-<short sha>.
-    docker_tags: # optional, default is 
-    # Docker build context, relative to project_path unless absolute.
-    docker_context: # optional, default is .
-    # Dockerfile path, relative to project_path unless absolute.
-    dockerfile: # optional, default is Dockerfile
-    # Comma separated Docker target platforms for buildx, e.g. linux/amd64,linux/arm64. Empty uses a regular Docker build for the runner platform.
-    docker_platforms: # optional, default is 
-    # Docker registry username. For ghcr.io this is usually the GitHub actor.
-    docker_username: # optional, default is 
-    # Docker registry password or token.
-    docker_password: # optional, default is 
-    # Also tag and push latest.
-    docker_push_latest: # optional, default is false
+name: Test and Native Code Coverage
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write      
+      code-quality: write    # Required for GitHub Enterprise Code Coverage API
+      pull-requests: write   # Allows appending the widget inside the PR
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: go.sum
+
+      - name: Setup Node.js (for Smoke Engine)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Clone Upstream Conformance Suite
+        run: |
+          git clone --depth 1 https://github.com/skyphusion-labs/the-hollow-grid.git upstream-mud
+          cd upstream-mud && npm install
+
+      - name: Run Go Unit Tests with Coverage
+        run: go test -v -coverprofile=unit.out -covermode=atomic ./...
+
+      - name: Build Instrumented Server Binary
+        run: go build -cover -o hollow-grid-server ./cmd/...
+
+      - name: Run E2E Smoke Conformance Suite
+        run: |
+          mkdir -p docoverage
+          export GOCOVERDIR=$(pwd)/docoverage
           
+          ./hollow-grid-server &
+          SERVER_PID=$!
+          
+          timeout 10s bash -c 'until curl -sf http://localhost:8790/health; do sleep 1; done' || true
+          
+          MUD_URL=ws://localhost:8790/ws timeout 90s node upstream-mud/smoke.mjs || true
+          
+          kill -SIGTERM $SERVER_PID || kill -9 $SERVER_PID
+          sleep 2
+
+      - name: Process Binary Telemetry
+        run: go tool covdata textfmt -i=docoverage -o=smoke.out
+
+      - name: Merge Coverage Matrices
+        run: |
+          echo "mode: atomic" > coverage.out
+          grep -h -v "^mode:" unit.out smoke.out >> coverage.out || true
+
+      - name: Upload coverage report
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-code-coverage@v1
+        with:
+          file: ./coverage.out
+          language: go
