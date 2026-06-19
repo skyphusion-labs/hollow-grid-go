@@ -1,0 +1,111 @@
+name: Build and push GHCR image
+
+# Mirrors the Jenkinsfile pipeline: lint/vet/test on every push, Docker build +
+# push to GHCR on push to main. The smoke conformance suite runs after the build
+# (informational -- a partial pass does not fail the workflow while the port is
+# in progress). Deploy (pull + restart on the target host) is a separate step.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ghcr-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/skyphusion-labs/hollow-grid-go
+
+jobs:
+  ci:
+    name: Lint, test, build, and push
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: go.sum
+
+      - name: Lint (gofmt)
+        run: |
+          fmt=$(gofmt -l ./cmd ./internal 2>/dev/null || gofmt -l .)
+          if [ -n "$fmt" ]; then
+            echo "gofmt needed on:"
+            echo "$fmt"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t "${{ env.IMAGE }}:${{ github.sha }}" \
+            -t "${{ env.IMAGE }}:latest" \
+            .
+
+      - name: Smoke conformance suite (informational)
+        run: |
+          SMOKE_DIR=$(mktemp -d)
+          git clone --depth 1 https://github.com/skyphusion-labs/the-hollow-grid.git "$SMOKE_DIR" 2>/dev/null || true
+          SMOKE="$SMOKE_DIR/smoke.mjs"
+          if [ ! -f "$SMOKE" ]; then
+            echo "SKIP: smoke suite not found"
+            exit 0
+          fi
+          docker rm -f hgg-ci >/dev/null 2>&1 || true
+          docker run -d --name hgg-ci -p 18790:8790 "${{ env.IMAGE }}:latest"
+          for i in $(seq 1 20); do curl -sf localhost:18790/health >/dev/null 2>&1 && break; sleep 1; done
+          MUD_URL=ws://localhost:18790/ws timeout 90 node "$SMOKE" > smoke.txt 2>&1 || true
+          docker rm -f hgg-ci >/dev/null 2>&1 || true
+          pass=$(grep -c '^ok' smoke.txt || true)
+          fail=$(grep -c '^FAIL' smoke.txt || true)
+          echo "smoke conformance: ${pass} passed / ${fail} failed (informational)"
+        continue-on-error: true
+
+      - name: Upload smoke results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-results
+          path: smoke.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Log in to GHCR (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to GHCR (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          docker push "${{ env.IMAGE }}:${{ github.sha }}"
+          docker push "${{ env.IMAGE }}:latest"
+          echo "Pushed hollow-grid-go:${{ github.sha }} to GHCR."
+          echo "Actual deploy (pull + restart on target host) is a separate step."
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker rm -f hgg-ci >/dev/null 2>&1 || true
+          docker logout ghcr.io || true
