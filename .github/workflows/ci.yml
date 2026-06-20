@@ -4,7 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
-    runs-on: ubuntu-latest
+
+# hollow-grid-go is a PRIVATE repo (no outside PRs), so CI runs on the
+# org-level self-hosted fleet pool.
+jobs:
+  build:
+    runs-on: [self-hosted, fleet]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
