@@ -3,7 +3,7 @@
 # A Hollow Grid world server, containerised. Multi-stage: build a static binary
 # against the pinned Go toolchain, then ship just that binary on a distroless
 # base (no shell, no package manager, tiny attack surface). The end state is to
-# run this on mindcrime via `docker run`, with the character store on a mounted
+# run this via `docker run`, with the character store on a mounted
 # /data volume.
 
 # --- build ---
