@@ -27,7 +27,7 @@ multiplayer (deferred — see the end).
 - [x] the **holding-pit rescue** — beat the warden, `free` the captive → `grid.rescued` (named, +morality, unfarmable)
 - [x] **dreams** — `sleep` → `char.dream`, a mirror of your record
 - [x] **persistence** — the canonical `CharSheet` via `CharStore`/`FileStore`; resume on a known name
-- [x] **Docker** (multi-stage → distroless) + **Jenkins CI/CD** (lint → test → image → conformance → deploy)
+- [x] **Docker** (multi-stage → distroless) + **CI** (GitHub Actions: `go vet` + build, unit tests + the upstream conformance suite; image build + deploy still to be wired)
 
 ## Next (world-local)
 
