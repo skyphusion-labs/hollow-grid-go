@@ -121,7 +121,7 @@ Dockerfile          multi-stage build -> distroless
   fleet]`), not GitHub-hosted. `release.yml` builds + pushes to GHCR (`:<sha>` + `:latest`) on push to
   `main`; the smoke conformance run is informational / non-blocking while the port is in progress (a
   partial pass never reds the build). Deploy (pull + restart on the host) is a separate deliberate step
-  (the mindcrime Jenkins that did it is retired).
+ .
 
 ## Crew + identity
 
