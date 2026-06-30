@@ -59,7 +59,7 @@ A world a player (or an LLM agent) can actually live in:
 | **Economy** | the tinker's shop (`list`/`buy` gear for gold) |
 | **Dreams** | `sleep` → `char.dream`, a mirror of your own record |
 | **Persistence** | the canonical `CharSheet` saved locally (the seam the federation client will later implement against the Grid) |
-| **CI** | GitHub Actions: `go vet` + build, unit tests + the upstream E2E conformance suite. Image build + deploy are not yet automated (the mindcrime Jenkins that did it is retired). |
+| **CI** | GitHub Actions: `go vet` + build, unit tests + the upstream E2E conformance suite. Image build + deploy are not yet automated. |
 
 See [docs/COMMANDS.md](docs/COMMANDS.md) for the verb set and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 
@@ -82,7 +82,6 @@ internal/store/    the CharStore interface + a dependency-free FileStore (the fe
 internal/transport/ the player transport: the WebSocket server and the session select-loop
 docs/              protocol notes, architecture, the build plan, the command reference
 Dockerfile         multi-stage build -> distroless
-Jenkinsfile        retired Jenkins pipeline (CI is now GitHub Actions)
 ```
 
 ## Development
