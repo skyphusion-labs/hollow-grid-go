@@ -1,15 +1,8 @@
 version: 2
 updates:
-  # Worker npm devDependencies (wrangler, typescript, workers-types).
-  - package-ecosystem: npm
-    directory: /worker
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-
-  # Relay Go modules.
+  # Main Go modules.
   - package-ecosystem: gomod
-    directory: /relay
+    directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
