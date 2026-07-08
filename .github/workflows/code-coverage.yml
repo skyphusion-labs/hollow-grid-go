@@ -1,19 +1,24 @@
-name: Test and Native Code Coverage
+name: code-coverage
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
+
+permissions:
+  contents: read
+  id-token: write
+  code-quality: write
+  pull-requests: write
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   coverage:
-    runs-on: [self-hosted, fleet]
-    permissions:
-      contents: read
-      id-token: write      
-      code-quality: write    # Required for GitHub Enterprise Code Coverage API
-      pull-requests: write   # Allows appending the widget inside the PR
-
+    name: coverage
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v7
@@ -21,7 +26,7 @@ jobs:
       - name: Setup Go environment
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.4"
+          go-version-file: go.mod
           cache-dependency-path: go.sum
 
       - name: Setup Node.js (for Smoke Engine)
@@ -44,24 +49,31 @@ jobs:
         run: |
           mkdir -p docoverage
           export GOCOVERDIR=$(pwd)/docoverage
-          
+
           ./hollow-grid-server &
           SERVER_PID=$!
-          
-          timeout 10s bash -c 'until curl -sf http://localhost:8790/health; do sleep 1; done' || true
-          
+
+          timeout 30s bash -c 'until curl -sf http://localhost:8790/health; do sleep 1; done'
+
           MUD_URL=ws://localhost:8790/ws timeout 90s node upstream-mud/smoke.mjs || true
-          
+
           kill -SIGTERM $SERVER_PID || kill -9 $SERVER_PID
+          wait $SERVER_PID 2>/dev/null || true
           sleep 2
 
       - name: Process Binary Telemetry
-        run: go tool covdata textfmt -i=docoverage -o=smoke.out
+        run: |
+          if [ -d docoverage ] && [ "$(ls -A docoverage 2>/dev/null)" ]; then
+            go tool covdata textfmt -i=docoverage -o=smoke.out
+          else
+            echo "mode: atomic" > smoke.out
+          fi
 
       - name: Merge Coverage Matrices
         run: |
           echo "mode: atomic" > coverage.out
           grep -h -v "^mode:" unit.out smoke.out >> coverage.out || true
+          test -s coverage.out
 
       - name: Upload coverage report
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository

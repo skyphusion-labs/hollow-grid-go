@@ -10,8 +10,8 @@ name: release
 #
 # Deploy (pull + restart on the target host) stays a separate deliberate step.
 #
-# Runner: org self-hosted fleet pool (private repo, no outside PRs), matching the
-# existing ci.yml. GHCR auth uses the built-in GITHUB_TOKEN (no PAT) with
+# Public repo -> GitHub-hosted ubuntu-latest (fork-safe), never the fleet pool.
+# GHCR auth uses the built-in GITHUB_TOKEN (no PAT) with
 # packages: write scoped to this workflow only. Go is pinned to go.mod so CI
 # never drifts from the code.
 
@@ -34,7 +34,7 @@ env:
 jobs:
   build:
     name: Lint, test, build, and push
-    runs-on: [self-hosted, fleet]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
