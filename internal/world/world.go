@@ -19,12 +19,12 @@ import (
 
 // RoomInfoPayload is emitted as room.info when a room is shown.
 type RoomInfoPayload struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
-	Exits   []string `json:"exits"`
-	Mobs    []MobRef `json:"mobs"`
-	Items   []string `json:"items"`
-	Players []string `json:"players"`
+	ID      string      `json:"id"`
+	Name    string      `json:"name"`
+	Exits   []string    `json:"exits"`
+	Mobs    []MobRef    `json:"mobs"`
+	Items   []string    `json:"items"`
+	Players []PlayerRef `json:"players"`
 }
 
 // CharVitalsPayload is emitted as char.vitals on room view and when vitals change.
@@ -152,7 +152,7 @@ func (r *Room) Info() RoomInfoPayload {
 	}
 	return RoomInfoPayload{
 		ID: r.ID, Name: r.Name, Exits: exits,
-		Mobs: mobs, Items: []string{}, Players: []string{},
+		Mobs: mobs, Items: []string{}, Players: nil,
 	}
 }
 
@@ -218,7 +218,9 @@ type Player struct {
 	// Target is the mob this player is fighting (nil = not in combat).
 	Target *Mob
 	// Position is "standing" or "resting" (combat overrides it to "fighting").
-	Position string
+	Position  string
+	Addiction int
+	Poisoned  bool
 }
 
 // NewPlayer spawns a fresh level-1 character of the given race at startRoom, with
@@ -281,7 +283,8 @@ func (p *Player) Vitals() CharVitalsPayload {
 // Affects renders the player as a char.affects payload.
 func (p *Player) Affects() CharAffectsPayload {
 	return CharAffectsPayload{
-		Morality: p.Morality, Faction: p.Faction, Race: p.Race, Ashsworn: p.Ashsworn,
+		Morality: p.Morality, Addiction: p.Addiction, Faction: p.Faction,
+		Race: p.Race, Ashsworn: p.Ashsworn,
 	}
 }
 
@@ -334,7 +337,7 @@ func (w *World) seed() {
 			Exits: map[string]string{"south": "nexus", "north": "holding_pit"},
 			Actions: []Action{
 				{Verb: "join", Label: "join the Cinder Front for blood money", Kind: "moral", Valence: "corrupt"},
-				{Verb: "defy", Label: "spit on the Front's offer and walk past", Kind: "moral", Valence: "virtuous"},
+				{Verb: "defend", Label: "stand with the refugees against the Cinder Front", Kind: "moral", Valence: "virtuous"},
 			}},
 		{ID: "holding_pit", Name: "The Holding Pit",
 			Desc:  "A sunken concrete cell, walls scrawled with the tally-marks of the desperate. Chains bolt into the far wall.",
@@ -346,8 +349,8 @@ func (w *World) seed() {
 			Desc:  "Wind drags grit across corrugated steel. The wastes stretch out in every direction, indifferent and enormous. A catwalk runs north off the roof's edge and down to the open flats.",
 			Exits: map[string]string{"down": "workshop", "north": "dunes"}},
 		{ID: "tunnels", Name: "Service Tunnels",
-			Desc:  "Cramped, dripping, and lit by one surviving strip light. Something skitters in the dark just past the reach of it.",
-			Exits: map[string]string{"up": "nexus"}},
+			Desc:  "Cramped, dripping, and lit by one surviving strip light. Something skitters in the dark just past the reach of it. A dead service trunk runs east, still humming.",
+			Exits: map[string]string{"up": "nexus", "east": "grid-gate"}},
 		{ID: "dunes", Name: "The Ash Flats", Outdoors: true,
 			Desc:  "The wastes proper: a grey pan of ash and salt running to a horizon you cannot trust. The rooftop catwalk drops back south; the cracked Scorch Road runs east.",
 			Exits: map[string]string{"south": "roof", "east": "scorch_road"}},

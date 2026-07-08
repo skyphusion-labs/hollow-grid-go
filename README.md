@@ -12,7 +12,7 @@ federation as a node.
 > of a choice is legible as data, not buried in prose. This port keeps that intact.
 
 - **Upstream contract:** [`the-hollow-grid/docs/protocol.md`](https://github.com/SkyPhusion/the-hollow-grid) — the wire spec is deliberately language-agnostic; a Go world is a first-class citizen of the same Grid.
-- **Definition of done:** the upstream `smoke.mjs` conformance suite. This port is built **to pass it, phase by phase.** Currently **56 / 134** checks green; the rest are the federation engine and multiplayer (see [docs/PLAN.md](docs/PLAN.md)).
+- **Definition of done:** the upstream `smoke.mjs` conformance suite. Currently **107 / 134** checks green on branch `feat/rust-choir-world`; remaining red is endgame map content (data-leech zone, Cinder Front stronghold) and full Grid Hub federation (tide, travel, gridcast, rescued roll).
 - **Status:** a fully playable **standalone** world. Federation is additive and never blocks play; it is not wired yet.
 
 ## Quick start

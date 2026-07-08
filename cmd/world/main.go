@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,9 +23,10 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8790", "listen address")
-	name := flag.String("world-name", "The Hollow Grid (Go)", "world display name")
-	url := flag.String("world-url", "", "this world's public URL (for the federation registry)")
+	name := flag.String("world-name", "Rust Choir", "world display name")
+	url := flag.String("world-url", "", "this world's public URL (for the federation registry, e.g. wss://rustchoir.skyphusion.org/ws)")
 	data := flag.String("data", "data", "directory for local character persistence")
+	admins := flag.String("admins", "skyphusion", "comma-separated keeper names (wall command)")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -36,7 +38,13 @@ func main() {
 	}
 
 	w := world.New(*name, *url)
-	srv := transport.NewServer(w, st, log)
+	var adminList []string
+	for _, a := range strings.Split(*admins, ",") {
+		if t := strings.TrimSpace(a); t != "" {
+			adminList = append(adminList, t)
+		}
+	}
+	srv := transport.NewServer(w, st, nil, adminList, log)
 
 	httpSrv := &http.Server{
 		Addr:              *addr,

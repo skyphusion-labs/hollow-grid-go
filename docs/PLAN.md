@@ -3,8 +3,9 @@
 Porting the Hollow Grid world framework to Go, against the upstream
 `docs/protocol.md`. The scoreboard is the upstream `smoke.mjs` (134 checks at the
 time of writing): **build the port to pass it, phase by phase.** Currently
-**56 / 134**. The unpassed checks are almost entirely the federation engine and
-multiplayer (deferred — see the end).
+**56 / 134** checks green; the rest are the federation engine and
+multiplayer (deferred -- see the end). Updated 2026-07-08: **81 / 134** on branch
+`feat/rust-choir-world` (multiplayer, listen/ping, map.svg, Rust Choir).
 
 ## Done
 
@@ -31,6 +32,10 @@ multiplayer (deferred — see the end).
 
 ## Next (world-local)
 
+- [x] **Multiplayer** -- session registry, `tell`/`reply`/`yell`/`emote`, `room.info.players` with standing
+- [x] **`listen` + `ping`** -- `grid.transmission`, `grid.echo`, `grid.federation` (local hub fallback)
+- [x] **`/map.svg`** -- minimal world map endpoint
+- [x] **Rust Choir identity** -- default world name, Grid Gate tract linked from tunnels (see `docs/WORLD.md`)
 - [ ] **NPCs + `talk`** in the tavern (the dust-dealer / wench; `room.actions` social affordances)
 - [ ] **the redemption arc** — the way back from the cinders (a Front member / ash-sworn redeeming)
 - [ ] **the data-leech zone** — the sump → floodgate → Cold Storage Row, the data-leech mob, the core-shard quest from the stranded operator
@@ -38,11 +43,11 @@ multiplayer (deferred — see the end).
 
 ## Next (architecture)
 
-- [ ] **Multiplayer** — a shared session registry on the `World` plus a broadcast
+- [x] **Multiplayer** -- a shared session registry on the `Server` plus a broadcast
   path, so `room.info.players` lists others (with `standing`/`ash-sworn`), and
-  `tell`/`reply`/`yell`/`emote`/`server.announce` work. This single step lights up
-  a whole cluster of conformance checks at once. The select-loop sessions are
-  ready for it (each can register on connect and receive pushes on its heartbeat).
+  `tell`/`reply`/`yell`/`emote` work.
+- [ ] **Grid Hub HTTP client** -- fleet nodes cannot use CF service bindings today;
+  needs hub ingress or a relay Worker (Phase 3).
 
 ## Deferred — the federation engine (not this repo)
 

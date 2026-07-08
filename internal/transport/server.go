@@ -7,26 +7,85 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 
+	"github.com/SkyPhusion/hollow-grid-go/internal/grid"
 	"github.com/SkyPhusion/hollow-grid-go/internal/store"
 	"github.com/SkyPhusion/hollow-grid-go/internal/world"
 )
 
 // Server wires the HTTP surface for one world.
 type Server struct {
-	world *world.World
-	store store.CharStore
-	log   *slog.Logger
-	conns sync.WaitGroup // in-flight player sessions, for graceful drain
+	world    *world.World
+	store    store.CharStore
+	grid     grid.Hub
+	hub      *Hub
+	log      *slog.Logger
+	conns    sync.WaitGroup
+	admins   map[string]bool
+	caches   map[string]int // room id -> gold left for strangers
+	forgiven map[forgivenPair]bool
+	mu       sync.Mutex
 }
 
+type forgivenPair struct{ forgiver, subject string }
+
 // NewServer builds a transport server for the given world and character store.
-func NewServer(w *world.World, st store.CharStore, log *slog.Logger) *Server {
-	return &Server{world: w, store: st, log: log}
+func NewServer(w *world.World, st store.CharStore, gh grid.Hub, admins []string, log *slog.Logger) *Server {
+	if gh == nil {
+		gh = grid.NewLocalHub(w.Name, w.URL)
+	}
+	adm := map[string]bool{}
+	for _, a := range admins {
+		a = strings.TrimSpace(strings.ToLower(a))
+		if a != "" {
+			adm[a] = true
+		}
+	}
+	return &Server{
+		world: w, store: st, grid: gh, hub: NewHub(), log: log,
+		admins: adm, caches: map[string]int{}, forgiven: map[forgivenPair]bool{},
+	}
+}
+
+func (s *Server) isAdmin(name string) bool {
+	return s.admins[strings.ToLower(name)]
+}
+
+func (s *Server) cacheGold(room string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.caches[room]
+}
+
+func (s *Server) addCache(room string, amount int) {
+	s.mu.Lock()
+	s.caches[room] += amount
+	s.mu.Unlock()
+}
+
+func (s *Server) takeCache(room string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	g := s.caches[room]
+	s.caches[room] = 0
+	return g
+}
+
+func (s *Server) hasForgiven(forgiver, subject string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.forgiven[forgivenPair{forgiver, subject}]
+}
+
+func (s *Server) markForgiven(forgiver, subject string) {
+	s.mu.Lock()
+	s.forgiven[forgivenPair{forgiver, subject}] = true
+	s.mu.Unlock()
 }
 
 // Handler returns the world's HTTP handler (/ws, /health, /health/deep).
@@ -34,6 +93,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /health/deep", s.healthDeep)
+	mux.HandleFunc("GET /map.svg", s.mapSVG)
 	mux.HandleFunc("/ws", s.ws)
 	return mux
 }
@@ -81,7 +141,13 @@ func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	s.conns.Add(1)
 	defer s.conns.Done()
 	defer c.CloseNow()
-	handleConn(r.Context(), c, s.world, s.store, s.log)
+	handleConn(r.Context(), c, s)
+}
+
+func (s *Server) mapSVG(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(mapSVG))
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
