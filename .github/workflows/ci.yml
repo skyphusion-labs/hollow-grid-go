@@ -5,11 +5,18 @@ on:
     branches: [main]
   pull_request:
 
-# hollow-grid-go is a PRIVATE repo (no outside PRs), so CI runs on the
-# org-level self-hosted fleet pool.
+# Public repo -> GitHub-hosted ubuntu-latest (fork-safe), never the fleet pool.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
-    runs-on: [self-hosted, fleet]
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
@@ -17,4 +24,5 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
       - run: go vet ./...
+      - run: go test ./...
       - run: go build ./...
