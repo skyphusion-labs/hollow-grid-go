@@ -101,6 +101,7 @@ type LocalHub struct {
 	worldURL  string
 	traces    []Trace
 	local     map[string][]EchoTrace
+	rescued   []Rescued
 }
 
 // NewLocalHub builds a hub that satisfies federation-shaped calls offline.
@@ -160,6 +161,13 @@ func (h *LocalHub) RecentAcross(_ context.Context, world string, limit int) ([]T
 	return out, nil
 }
 
+func (h *LocalHub) AllTraces(limit int) []Trace {
+	if limit <= 0 || limit > len(h.traces) {
+		return h.traces
+	}
+	return h.traces[:limit]
+}
+
 func (h *LocalHub) Tide(context.Context) (int, error) { return 0, nil }
 
 func (h *LocalHub) ShiftTide(_ context.Context, delta int) (int, error) { return delta, nil }
@@ -197,10 +205,22 @@ func (h *LocalHub) ReportPresence(context.Context, string, []PresenceEntry, int6
 func (h *LocalHub) Presence(context.Context, int64) ([]Presence, error) { return nil, nil }
 
 func (h *LocalHub) RecordRescued(_ context.Context, world, name, savedBy string, at int64) error {
+	if at == 0 {
+		at = time.Now().UnixMilli()
+	}
+	h.rescued = append([]Rescued{{World: world, Name: name, SavedBy: savedBy, At: at}}, h.rescued...)
+	if len(h.rescued) > 200 {
+		h.rescued = h.rescued[:200]
+	}
 	return h.Record(context.Background(), world, "rescued", "rescue", name+" freed by "+savedBy, at)
 }
 
-func (h *LocalHub) RecentRescued(context.Context, int) ([]Rescued, error) { return nil, nil }
+func (h *LocalHub) RecentRescued(_ context.Context, limit int) ([]Rescued, error) {
+	if limit <= 0 || limit > len(h.rescued) {
+		return h.rescued, nil
+	}
+	return h.rescued[:limit], nil
+}
 
 func (h *LocalHub) RecordFallen(context.Context, string, string, string, int64) error { return nil }
 

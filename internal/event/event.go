@@ -33,6 +33,7 @@ const (
 	CombatEnd        = "combat.end"
 	WorldState       = "world.state"
 	GridRescued      = "grid.rescued"
+	GridRescuedRoll  = "grid.rescued_roll"
 	GridEcho         = "grid.echo"
 	GridFederation   = "grid.federation"
 	GridTransmission = "grid.transmission"

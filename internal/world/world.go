@@ -99,7 +99,9 @@ type CharDiedPayload struct {
 // CharDreamPayload is emitted as char.dream: the Grid shows a sleeper a mirror of
 // their own record.
 type CharDreamPayload struct {
-	Text string `json:"text"`
+	Text     string `json:"text"`
+	Personal bool   `json:"personal,omitempty"`
+	Subject  string `json:"subject,omitempty"`
 }
 
 // GridRescuedPayload is emitted as grid.rescued when you free a captive: who you
@@ -320,6 +322,7 @@ func New(name, url string) *World {
 	}
 	w.seed()
 	w.seedBonus()
+	w.seedEndgame()
 	return w
 }
 
@@ -349,8 +352,8 @@ func (w *World) seed() {
 			Desc:  "Wind drags grit across corrugated steel. The wastes stretch out in every direction, indifferent and enormous. A catwalk runs north off the roof's edge and down to the open flats.",
 			Exits: map[string]string{"down": "workshop", "north": "dunes"}},
 		{ID: "tunnels", Name: "Service Tunnels",
-			Desc:  "Cramped, dripping, and lit by one surviving strip light. Something skitters in the dark just past the reach of it. A dead service trunk runs east, still humming.",
-			Exits: map[string]string{"up": "nexus", "east": "grid-gate"}},
+			Desc:  "Cramped, dripping, and lit by one surviving strip light. Something skitters in the dark just past the reach of it. A flooded shaft drops away below; a dead service trunk runs east.",
+			Exits: map[string]string{"up": "nexus", "down": "sump", "east": "grid-gate"}},
 		{ID: "dunes", Name: "The Ash Flats", Outdoors: true,
 			Desc:  "The wastes proper: a grey pan of ash and salt running to a horizon you cannot trust. The rooftop catwalk drops back south; the cracked Scorch Road runs east.",
 			Exits: map[string]string{"south": "roof", "east": "scorch_road"}},

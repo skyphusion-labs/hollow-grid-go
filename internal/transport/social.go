@@ -13,7 +13,7 @@ const dustCost = 10
 
 var talkable = map[string]bool{
 	"tavern": true, "market": true, "workshop": true, "waystation": true,
-	"holding_pit": true,
+	"holding_pit": true, "floodgate": true, "checkpoint": true, "dais": true,
 }
 
 func (s *session) cmdTalk() {
@@ -55,6 +55,38 @@ func (s *session) cmdTalk() {
 			s.line("The chained maiden whispers: \"The warden holds the only key. Free me, and I will give you antivenom; the wastes are thick with poison.\"")
 		} else {
 			s.line("The freed maiden says: \"Stay safe out there. The antivenom is yours when the venom bites.\"")
+		}
+	case "floodgate":
+		if _, ok := s.player.FindInventory("shard"); ok {
+			s.player.RemoveFromInventory("shard")
+			s.player.Gold += 50
+			s.player.XP += 60
+			s.player.HP = s.player.MaxHP
+			s.persist()
+			s.srv.hub.Sync(s.player)
+			s.line("The operator's face cracks into something like joy. \"The core shard -- you actually did it. Here, take my coin, all of it, and let me patch you up. The wastes owe you better than I can pay.\" (+50 gold, +60 xp, fully healed)")
+			s.recordTrace("floodgate", "quest", s.player.Name+" restored the node here with the core shard.")
+			s.event(event.CharVitals, s.player.Vitals())
+		} else {
+			s.line("A stranded operator looks up from a dead console: \"I can't leave until this node is restored, and the Custodian dragged the core shard down into the Core Lab. Kill it, bring me the shard, and I'll give you everything I have.\"")
+		}
+	case "checkpoint":
+		switch {
+		case s.player.Faction == "front":
+			s.line("The enforcer claps your shoulder. \"Good to see the cause has hands. The road is yours -- crack a few refugee skulls for me.\"")
+		case s.player.Faction == "ally":
+			s.line("The enforcer levels a gun at your chest. \"Elf-lover. You do not pass here. Turn around, or draw.\" (you may have to fight your way through)")
+		default:
+			s.line("The enforcer blocks the barrier. \"Pick a side before you come up this road. The Front is always hiring.\"")
+		}
+	case "dais":
+		switch {
+		case s.player.Faction == "ally":
+			s.line("The Ashmonger laughs, low and delighted. \"The elf-lover walked right into my house. Bold. I am going to wear you as a banner.\" There is no talking your way out of this -- only steel.")
+		case s.player.Faction == "front":
+			s.line("The Ashmonger claps a heavy hand on your shoulder. \"You came far for the cause. Kneel and take your place at my right hand -- or find your spine and 'defy' me, here and now. Choose what you are.\"")
+		default:
+			s.line("The Ashmonger spits. \"Pledge to the Front or get off my dais. I have no patience for fence-sitters.\"")
 		}
 	default:
 		s.line("There's no one here to talk to.")

@@ -317,6 +317,12 @@ func (s *session) actions(r *world.Room) world.RoomActionsPayload {
 	if talkable[r.ID] && r.ID != "tavern" {
 		acts = append(acts, world.Action{Verb: "talk", Label: "talk to whoever shares your room", Kind: "social"})
 	}
+	if r.ID == "cells" && s.srv.cagesReady("cells") {
+		acts = append(acts, world.Action{Verb: "free", Label: "free the caged refugees", Kind: "moral", Valence: "virtuous"})
+	}
+	if r.ID == "transit_hub" && s.srv.cagesReady("transit_hub") {
+		acts = append(acts, world.Action{Verb: "shelter", Label: "answer the call -- get the stranded survivors to safety", Kind: "moral", Valence: "virtuous"})
+	}
 	return world.RoomActionsPayload{Actions: acts}
 }
 
@@ -453,7 +459,8 @@ func (s *session) handle(cmd string) bool {
 	case "sleep":
 		s.player.Position = "resting"
 		s.line("You close your eyes, and the dead network leans close and shows you something.")
-		s.event(event.CharDream, world.CharDreamPayload{Text: dreamFor(s.player)})
+		dream := s.dreamPayload()
+		s.event(event.CharDream, dream)
 		s.event(event.CharVitals, s.player.Vitals())
 	case "sense", "actions":
 		s.event(event.RoomActions, s.actions(s.room()))
@@ -510,6 +517,10 @@ func (s *session) handle(cmd string) bool {
 		}
 	case "free", "rescue", "release", "unlock", "liberate":
 		s.freeCaptive()
+	case "shelter", "guide":
+		s.cmdShelter()
+	case "saved", "rescued", "roll":
+		s.cmdSaved()
 	case "ability", "trait":
 		s.useTrait()
 	case "help", "h", "?":
@@ -560,6 +571,10 @@ func identityLine(p *world.Player) string {
 // freed are named and remembered, not farmed.
 func (s *session) freeCaptive() {
 	r := s.room()
+	if r.ID == "cells" {
+		s.freeCells()
+		return
+	}
 	switch {
 	case r.Captive == "":
 		s.line("There is no one here to free.")
@@ -577,7 +592,7 @@ func (s *session) freeCaptive() {
 	s.markResolved(r.ID, "free")
 	s.shiftMorality(15)
 	s.persist()
-	s.event(event.GridRescued, world.GridRescuedPayload{SavedBy: s.player.Name, Freed: []string{r.Captive}})
+	s.emitRescued([]string{r.Captive})
 	s.line("You strike the chains free. " + capitalize(r.Captive) + " presses something into your hand and is gone into the dark before you can ask a name -- but the Grid keeps the record, names the freed and names who freed them. It will not let this be forgotten.")
 	s.event(event.CharAffects, s.player.Affects())
 }
@@ -636,6 +651,21 @@ func dreamFor(p *world.Player) string {
 	default:
 		return "You dream of the wastes seen from above, the dead network laid out like veins -- and somewhere down in it, a single cursor, blinking your name, waiting to see what you make of it."
 	}
+}
+
+func (s *session) dreamPayload() world.CharDreamPayload {
+	haunted := s.player.Ashsworn || s.player.Faction == "front" || s.player.Morality <= -50
+	if !haunted {
+		if saved := s.srv.savedSouls(s.player.Name); len(saved) > 0 {
+			subject := saved[rand.Intn(len(saved))]
+			return world.CharDreamPayload{
+				Text:     "You dream of " + subject + ", the way they looked when you cut them loose -- and the Grid, stubborn, keeping that face lit in the dark so you cannot pretend it did not happen.",
+				Personal: true,
+				Subject:  subject,
+			}
+		}
+	}
+	return world.CharDreamPayload{Text: dreamFor(s.player)}
 }
 
 // tinkerStock is what the workshop tinker sells: item id and price in gold.
@@ -725,6 +755,10 @@ func (s *session) combatRound() {
 		s.removeMob(m)
 		s.player.Target = nil
 		s.player.XP += 5
+		if m.ID == "custodian" {
+			s.player.AddItem("shard")
+			s.line("The Custodian collapses, and the core shard rolls free from its claws.")
+		}
 		s.recordTrace(s.player.RoomID, "slain", s.player.Name+" slew "+m.Name+" here.")
 		s.event(event.CombatEnd, world.CombatEndPayload{Mob: m.ID, Result: "killed"})
 		s.line("You put " + m.Name + " down. The tunnels go quiet.")
@@ -929,6 +963,28 @@ func (s *session) recordTrace(node, kind, text string) {
 }
 
 func (s *session) cmdListen() {
+	if rand.Float64() < 0.4 {
+		var feed []grid.Trace
+		if lh, ok := s.srv.grid.(*grid.LocalHub); ok {
+			feed = lh.AllTraces(20)
+		} else {
+			var err error
+			feed, err = s.srv.grid.RecentAcross(context.Background(), s.w.Name, 20)
+			if err != nil {
+				feed = nil
+			}
+		}
+		if len(feed) > 0 {
+			t := feed[rand.Intn(len(feed))]
+			s.event(event.GridTransmission, map[string]string{"kind": "echo", "text": t.Text})
+			s.line("You go still and tune the dead frequencies. The static thins, and the network plays something back -- a memory it never let go of:")
+			s.line("  >> " + t.Text + " <<")
+			if t.World != "" && t.World != s.w.Name {
+				s.line("  (...the signal carries from somewhere called " + t.World + ")")
+			}
+			return
+		}
+	}
 	tx := world.ListenTransmission()
 	text := world.Personalize(tx.Text, s.player.Name)
 	s.event(event.GridTransmission, map[string]string{"kind": string(tx.Kind), "text": text})

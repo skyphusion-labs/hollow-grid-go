@@ -29,6 +29,8 @@ type Server struct {
 	admins   map[string]bool
 	caches   map[string]int // room id -> gold left for strangers
 	forgiven map[forgivenPair]bool
+	cages    map[string]int64    // room id -> unix ms when refill completes (0 = ready)
+	saved    map[string][]string // player name -> people they rescued
 	mu       sync.Mutex
 }
 
@@ -49,6 +51,7 @@ func NewServer(w *world.World, st store.CharStore, gh grid.Hub, admins []string,
 	return &Server{
 		world: w, store: st, grid: gh, hub: NewHub(), log: log,
 		admins: adm, caches: map[string]int{}, forgiven: map[forgivenPair]bool{},
+		cages: map[string]int64{}, saved: map[string][]string{},
 	}
 }
 
@@ -86,6 +89,36 @@ func (s *Server) markForgiven(forgiver, subject string) {
 	s.mu.Lock()
 	s.forgiven[forgivenPair{forgiver, subject}] = true
 	s.mu.Unlock()
+}
+
+const cageRefillMs = 4 * 60 * 1000
+
+func (s *Server) cagesReady(room string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	at := s.cages[room]
+	return at == 0 || time.Now().UnixMilli() >= at
+}
+
+func (s *Server) setCageRefill(room string) {
+	s.mu.Lock()
+	s.cages[room] = time.Now().UnixMilli() + cageRefillMs
+	s.mu.Unlock()
+}
+
+func (s *Server) rememberSaved(player string, names ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.saved[player] = append(names, s.saved[player]...)
+	if len(s.saved[player]) > 24 {
+		s.saved[player] = s.saved[player][:24]
+	}
+}
+
+func (s *Server) savedSouls(player string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.saved[player]...)
 }
 
 // Handler returns the world's HTTP handler (/ws, /health, /health/deep).

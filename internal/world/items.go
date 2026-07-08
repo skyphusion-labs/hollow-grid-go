@@ -27,6 +27,7 @@ var Items = map[string]Item{
 	"plating": {ID: "plating", Name: "a sheet of scrap plating", Slot: "body", Armor: 2},
 	"charm":   {ID: "charm", Name: "an elven charm", Slot: ""},
 	"dust":    {ID: "dust", Name: "a packet of dust", Slot: ""},
+	"shard":   {ID: "shard", Name: "the core shard", Slot: ""},
 }
 
 // ItemByID returns the item definition for an id.
