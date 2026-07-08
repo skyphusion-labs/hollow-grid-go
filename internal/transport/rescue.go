@@ -51,6 +51,7 @@ func (s *session) freeCells() {
 	}
 	freed := pickRefugeeNames(rand.Intn(2) + 2)
 	s.srv.setCageRefill("cells")
+	s.deed("freed")
 	s.shiftMorality(15)
 	s.persist()
 	s.emitRescued(freed)
@@ -71,6 +72,7 @@ func (s *session) cmdShelter() {
 	}
 	saved := pickRefugeeNames(rand.Intn(2) + 2)
 	s.srv.setCageRefill("transit_hub")
+	s.deed("sheltered")
 	s.shiftMorality(15)
 	s.persist()
 	s.emitRescued(saved)

@@ -31,8 +31,12 @@ type Server struct {
 	forgiven map[forgivenPair]bool
 	cages    map[string]int64    // room id -> unix ms when refill completes (0 = ready)
 	saved    map[string][]string // player name -> people they rescued
+	deeds    map[string]map[string]int
+	kept     map[keptPair]bool
 	mu       sync.Mutex
 }
+
+type keptPair struct{ keeper, fallen string }
 
 type forgivenPair struct{ forgiver, subject string }
 
@@ -52,6 +56,7 @@ func NewServer(w *world.World, st store.CharStore, gh grid.Hub, admins []string,
 		world: w, store: st, grid: gh, hub: NewHub(), log: log,
 		admins: adm, caches: map[string]int{}, forgiven: map[forgivenPair]bool{},
 		cages: map[string]int64{}, saved: map[string][]string{},
+		deeds: map[string]map[string]int{}, kept: map[keptPair]bool{},
 	}
 }
 
@@ -119,6 +124,45 @@ func (s *Server) savedSouls(player string) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]string(nil), s.saved[player]...)
+}
+
+func (s *Server) addDeed(player, kind string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.deeds[player] == nil {
+		s.deeds[player] = map[string]int{}
+	}
+	s.deeds[player][kind]++
+}
+
+func (s *Server) deedsFor(player string) map[string]int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	src := s.deeds[player]
+	out := map[string]int{}
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
+func (s *Server) hasKept(keeper, fallen string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.kept[keptPair{keeper, fallen}]
+}
+
+func (s *Server) markKept(keeper, fallen string) {
+	s.mu.Lock()
+	s.kept[keptPair{keeper, fallen}] = true
+	s.mu.Unlock()
+}
+
+func (s *Server) persistPlayer(p *world.Player) {
+	if p == nil || p.Name == "" {
+		return
+	}
+	_ = s.store.Commit(p.Name, p.Sheet())
 }
 
 // Handler returns the world's HTTP handler (/ws, /health, /health/deep).

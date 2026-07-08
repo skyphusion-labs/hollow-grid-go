@@ -102,6 +102,7 @@ type LocalHub struct {
 	traces    []Trace
 	local     map[string][]EchoTrace
 	rescued   []Rescued
+	fallen    []Fallen
 }
 
 // NewLocalHub builds a hub that satisfies federation-shaped calls offline.
@@ -222,6 +223,23 @@ func (h *LocalHub) RecentRescued(_ context.Context, limit int) ([]Rescued, error
 	return h.rescued[:limit], nil
 }
 
-func (h *LocalHub) RecordFallen(context.Context, string, string, string, int64) error { return nil }
+func (h *LocalHub) RecordFallen(_ context.Context, world, name, room string, at int64) error {
+	if at == 0 {
+		at = time.Now().UnixMilli()
+	}
+	h.fallen = append([]Fallen{{World: world, Name: name, Room: room, At: at}}, h.fallen...)
+	if len(h.fallen) > 200 {
+		h.fallen = h.fallen[:200]
+	}
+	return nil
+}
 
-func (h *LocalHub) RecentFallen(context.Context, int) ([]Fallen, error) { return nil, nil }
+func (h *LocalHub) RecentFallen(_ context.Context, limit int) ([]Fallen, error) {
+	if len(h.fallen) == 0 {
+		return []Fallen{}, nil
+	}
+	if limit <= 0 || limit > len(h.fallen) {
+		return h.fallen, nil
+	}
+	return h.fallen[:limit], nil
+}

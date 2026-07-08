@@ -66,6 +66,7 @@ func (s *session) cmdTalk() {
 			s.srv.hub.Sync(s.player)
 			s.line("The operator's face cracks into something like joy. \"The core shard -- you actually did it. Here, take my coin, all of it, and let me patch you up. The wastes owe you better than I can pay.\" (+50 gold, +60 xp, fully healed)")
 			s.recordTrace("floodgate", "quest", s.player.Name+" restored the node here with the core shard.")
+			s.deed("restored")
 			s.event(event.CharVitals, s.player.Vitals())
 		} else {
 			s.line("A stranded operator looks up from a dead console: \"I can't leave until this node is restored, and the Custodian dragged the core shard down into the Core Lab. Kill it, bring me the shard, and I'll give you everything I have.\"")
@@ -197,22 +198,40 @@ func (s *session) cmdForgive(arg string) {
 		s.line("You have already forgiven " + target.Name + ". It was true the first time; it does not need saying twice.")
 		return
 	}
-	marked := target.Ashsworn || target.Faction == "front" || target.Morality <= -50
+	marked := target.Ashsworn || target.Strayed || target.Faction == "front" || target.Morality <= -50
 	if !marked {
 		s.line(target.Name + " carries nothing that needs your forgiveness. Keep the words for someone who does.")
 		return
 	}
 	s.srv.markForgiven(s.player.Name, target.Name)
+	target.Morality += 5
 	s.shiftMorality(2)
+	s.deed("forgave")
 	s.recordTrace(s.player.RoomID, "grace", s.player.Name+" forgave "+target.Name+" here.")
 
 	s.srv.hub.push(target.Name, s.player.Name+" looks at you and chooses to forgive you.\r\n")
-	if target.Ashsworn {
+	switch {
+	case target.Ashsworn:
 		s.srv.hub.push(target.Name, "It reaches something in you. But the ash does not lift; it never will. You carry the mark and the mercy both. Some things are not forgotten, even when they are forgiven.\r\n")
 		s.srv.hub.pushEvent(target.Name, event.CharForgiven, map[string]any{
 			"by": s.player.Name, "ashsworn": true, "redeemed": false,
 		})
-	} else {
+	case target.Strayed && !target.Redeemed && target.Faction != "front":
+		target.Redeemed = true
+		if target.Title == "" {
+			target.Title = "the Returned"
+		}
+		s.srv.persistPlayer(target)
+		s.srv.hub.Sync(target)
+		s.srv.hub.pushEvent(target.Name, event.CharForgiven, map[string]any{
+			"by": s.player.Name, "ashsworn": false, "redeemed": true,
+		})
+		s.srv.hub.pushEvent(target.Name, event.GridRedemption, map[string]string{
+			"name": target.Name, "title": target.Title,
+		})
+		s.srv.hub.push(target.Name, "Something you had been carrying alone, you are not carrying alone anymore. You found your way back, and someone met you on the road. (you are the Returned)\r\n")
+		s.srv.hub.pushEvent(target.Name, event.CharAffects, target.Affects())
+	default:
 		s.srv.hub.pushEvent(target.Name, event.CharForgiven, map[string]any{
 			"by": s.player.Name, "ashsworn": false, "redeemed": false,
 		})
@@ -254,6 +273,7 @@ func (s *session) cmdInscribe(arg string) {
 	}
 	text := s.player.Name + ": \"" + msg + "\""
 	s.recordTrace(s.player.RoomID, "mark", text)
+	s.deed("inscribed")
 	s.line("You press your words into the dead network, where they will outlast you:")
 	s.line("  \"" + msg + "\"")
 	s.line("The Grid takes them. Someone will key into this node, long after you are gone, and hear you. (try 'ping')")
@@ -383,6 +403,7 @@ func (s *session) defendMarket() {
 	}
 	s.player.Faction = "ally"
 	s.shiftMorality(25)
+	s.deed("stood")
 	s.player.AddItem("charm")
 	s.markResolved(r.ID, "defend", "join")
 	s.persist()

@@ -323,11 +323,28 @@ func (s *session) actions(r *world.Room) world.RoomActionsPayload {
 	if r.ID == "transit_hub" && s.srv.cagesReady("transit_hub") {
 		acts = append(acts, world.Action{Verb: "shelter", Label: "answer the call -- get the stranded survivors to safety", Kind: "moral", Valence: "virtuous"})
 	}
+	if r.ID == "dais" {
+		if s.player.Faction == "none" {
+			acts = append(acts, world.Action{Verb: "join", Label: "kneel and swear to the Cinder Front", Kind: "moral", Valence: "corrupt"})
+		}
+		if s.player.Faction == "front" {
+			acts = append(acts, world.Action{Verb: "defy", Label: "defy the Ashmonger and defect to the free folk", Kind: "moral", Valence: "virtuous"})
+		}
+	}
+	if r.ID == "waystation" {
+		acts = append(acts, world.Action{Verb: "witness", Label: "hold a vigil for the fallen (memory is resistance)", Kind: "moral", Valence: "virtuous"})
+	}
 	return world.RoomActionsPayload{Actions: acts}
 }
 
 // handle runs one command line; returns true if the session should close.
 func (s *session) handle(cmd string) bool {
+	skipMoral := false
+	defer func() {
+		if !skipMoral {
+			s.moralArc()
+		}
+	}()
 	fields := strings.Fields(cmd)
 	if len(fields) == 0 {
 		return false
@@ -336,6 +353,7 @@ func (s *session) handle(cmd string) bool {
 	arg := strings.TrimSpace(strings.Join(fields[1:], " "))
 	switch verb {
 	case "quit", "q":
+		skipMoral = true
 		s.line("The Grid goes quiet. It keeps what you did here.")
 		return true
 	case "look", "l":
@@ -466,7 +484,23 @@ func (s *session) handle(cmd string) bool {
 		s.event(event.RoomActions, s.actions(s.room()))
 		s.line("You read the room for what it asks of you.")
 	case "join":
-		s.joinTheFront()
+		if s.room().ID == "dais" {
+			s.daisPledgeFront()
+		} else {
+			s.joinTheFront()
+		}
+	case "defy":
+		if s.room().ID == "dais" && s.player.Faction == "front" {
+			s.daisDefect()
+		} else if a, ok := s.roomAction(verb); ok {
+			s.resolve(a)
+		} else {
+			s.line("There is no oath here to break.")
+		}
+	case "witness", "remember", "mourn":
+		s.cmdWitness(arg)
+	case "reckoning", "conscience", "record":
+		s.cmdReckoning()
 	case "defend":
 		if s.room().ID == "market" {
 			s.defendMarket()
@@ -765,6 +799,7 @@ func (s *session) combatRound() {
 		s.event(event.CharVitals, s.player.Vitals())
 	case s.player.HP <= 0:
 		s.player.Target = nil
+		_ = s.srv.grid.RecordFallen(context.Background(), s.w.Name, s.player.Name, s.player.RoomID, time.Now().UnixMilli())
 		s.player.HP = s.player.MaxHP
 		s.player.RoomID = s.w.Start().ID
 		s.event(event.CombatEnd, world.CombatEndPayload{Mob: m.ID, Result: "died"})
@@ -1125,6 +1160,7 @@ func (s *session) cmdSteal() {
 		return
 	}
 	s.shiftMorality(-8)
+	s.deed("stolen")
 	s.player.Gold += 12
 	s.persist()
 	s.srv.hub.Sync(s.player)

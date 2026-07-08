@@ -123,6 +123,18 @@ type CharSheet struct {
 	Title    string `json:"title"`
 	Race     string `json:"race"`
 	Ashsworn bool   `json:"ashsworn"`
+	Strayed  bool   `json:"strayed"`
+	Redeemed bool   `json:"redeemed"`
+}
+
+// CharReckoningPayload is emitted as char.reckoning: the moral self-model mirror.
+type CharReckoningPayload struct {
+	Morality int            `json:"morality"`
+	Standing string         `json:"standing"`
+	Ashsworn bool           `json:"ashsworn"`
+	Strayed  bool           `json:"strayed"`
+	Redeemed bool           `json:"redeemed"`
+	Deeds    map[string]int `json:"deeds"`
 }
 
 // --- model ---
@@ -212,6 +224,8 @@ type Player struct {
 	Faction  string
 	Title    string
 	Ashsworn bool
+	Strayed  bool
+	Redeemed bool
 	// Local state (never federated): the pack and what is worn. See items.go.
 	Inventory []string
 	Equipment map[string]string // slot -> item id
@@ -253,6 +267,7 @@ func NewPlayerFromSheet(name string, s CharSheet, startRoom string) *Player {
 		Name: name, Race: s.Race, RoomID: startRoom, HP: mh, MaxHP: mh,
 		Level: level, XP: s.XP, Gold: s.Gold,
 		Morality: s.Morality, Faction: faction, Title: s.Title, Ashsworn: s.Ashsworn,
+		Strayed: s.Strayed, Redeemed: s.Redeemed,
 		// Inventory is world-local and not federated; a returning character wakes
 		// with the starter again (local item persistence is a later concern).
 		Inventory: []string{Starter}, Equipment: map[string]string{},
@@ -264,6 +279,7 @@ func (p *Player) Sheet() CharSheet {
 	return CharSheet{
 		Level: p.Level, XP: p.XP, Gold: p.Gold, Faction: p.Faction,
 		Morality: p.Morality, Title: p.Title, Race: p.Race, Ashsworn: p.Ashsworn,
+		Strayed: p.Strayed, Redeemed: p.Redeemed,
 	}
 }
 
