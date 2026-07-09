@@ -125,6 +125,7 @@ type CharSheet struct {
 	Ashsworn bool   `json:"ashsworn"`
 	Strayed  bool   `json:"strayed"`
 	Redeemed bool   `json:"redeemed"`
+	Resisted bool   `json:"resisted"`
 }
 
 // CharReckoningPayload is emitted as char.reckoning: the moral self-model mirror.
@@ -226,6 +227,7 @@ type Player struct {
 	Ashsworn bool
 	Strayed  bool
 	Redeemed bool
+	Resisted bool
 	// Local state (never federated): the pack and what is worn. See items.go.
 	Inventory []string
 	Equipment map[string]string // slot -> item id
@@ -267,7 +269,7 @@ func NewPlayerFromSheet(name string, s CharSheet, startRoom string) *Player {
 		Name: name, Race: s.Race, RoomID: startRoom, HP: mh, MaxHP: mh,
 		Level: level, XP: s.XP, Gold: s.Gold,
 		Morality: s.Morality, Faction: faction, Title: s.Title, Ashsworn: s.Ashsworn,
-		Strayed: s.Strayed, Redeemed: s.Redeemed,
+		Strayed: s.Strayed, Redeemed: s.Redeemed, Resisted: s.Resisted,
 		// Inventory is world-local and not federated; a returning character wakes
 		// with the starter again (local item persistence is a later concern).
 		Inventory: []string{Starter}, Equipment: map[string]string{},
@@ -279,7 +281,7 @@ func (p *Player) Sheet() CharSheet {
 	return CharSheet{
 		Level: p.Level, XP: p.XP, Gold: p.Gold, Faction: p.Faction,
 		Morality: p.Morality, Title: p.Title, Race: p.Race, Ashsworn: p.Ashsworn,
-		Strayed: p.Strayed, Redeemed: p.Redeemed,
+		Strayed: p.Strayed, Redeemed: p.Redeemed, Resisted: p.Resisted,
 	}
 }
 
@@ -302,7 +304,7 @@ func (p *Player) Vitals() CharVitalsPayload {
 func (p *Player) Affects() CharAffectsPayload {
 	return CharAffectsPayload{
 		Morality: p.Morality, Addiction: p.Addiction, Faction: p.Faction,
-		Race: p.Race, Ashsworn: p.Ashsworn,
+		Race: p.Race, Ashsworn: p.Ashsworn, Resisted: p.Resisted,
 	}
 }
 

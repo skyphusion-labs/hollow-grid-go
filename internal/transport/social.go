@@ -19,7 +19,7 @@ var talkable = map[string]bool{
 func (s *session) cmdTalk() {
 	rid := s.player.RoomID
 	if !talkable[rid] {
-		s.line("There's no one here to talk to.")
+		s.line("You can't do that here.")
 		return
 	}
 	switch rid {
@@ -130,7 +130,7 @@ func (s *session) cmdBuy(arg string) {
 
 func (s *session) cmdSell(arg string) {
 	if s.room().ID != "market" {
-		s.line("There's no one here buying.")
+		s.line("You can't do that here.")
 		return
 	}
 	if s.player.Faction == "front" {

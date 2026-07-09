@@ -522,6 +522,18 @@ func (s *session) handle(cmd string) bool {
 		}
 	case "buy":
 		s.cmdBuy(arg)
+	case "resist":
+		s.cmdResist()
+	case "carouse":
+		s.cmdCarouse()
+	case "worlds":
+		s.cmdWorlds()
+	case "travel":
+		if s.cmdTravel(arg) {
+			skipMoral = true
+			s.line("The Grid routes you toward the far world. This connection closes.")
+			return true
+		}
 	case "talk":
 		s.cmdTalk()
 	case "forgive":
@@ -1156,7 +1168,7 @@ func (s *session) cmdEmote(arg string) {
 
 func (s *session) cmdSteal() {
 	if s.room().ID != "market" {
-		s.line("There is nothing here worth stealing.")
+		s.line("You can't do that here.")
 		return
 	}
 	s.shiftMorality(-8)
