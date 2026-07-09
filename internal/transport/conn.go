@@ -672,6 +672,9 @@ func (s *session) joinTheFront() {
 	hunted := world.RaceByID(s.player.Race).Stance == "hunted"
 	if hunted {
 		s.player.Ashsworn = true
+		s.shiftMorality(-40)
+	} else {
+		s.shiftMorality(-15)
 	}
 	s.markResolved(r.ID, "join", "defy", "defend")
 	s.persist()
