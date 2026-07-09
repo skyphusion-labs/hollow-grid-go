@@ -37,8 +37,10 @@ type Server struct {
 	kept        map[keptPair]bool
 	deadMobs    map[string]pendingRespawn // template id -> respawn schedule
 	mobSlainAt  map[string]int64          // template id -> unix ms when last slain
+	ground      map[string]map[string]int // room id -> item id -> qty
 	lastTide    int                       // cached collective tide from the hub
 	lastCast    int
+	combatMu    sync.Mutex
 	mu          sync.Mutex
 }
 
@@ -65,6 +67,7 @@ func NewServer(w *world.World, st store.CharStore, gh grid.Hub, admins []string,
 		cages:    map[string]int64{}, saved: map[string][]string{},
 		deeds: map[string]map[string]int{}, kept: map[keptPair]bool{},
 		deadMobs: map[string]pendingRespawn{}, mobSlainAt: map[string]int64{},
+		ground: map[string]map[string]int{},
 	}
 }
 

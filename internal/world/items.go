@@ -2,15 +2,24 @@ package world
 
 import "strings"
 
+// UseEffect is a consumable item's use hook (src/items.ts).
+type UseEffect struct {
+	Effect string // cure_poison | heal | drug
+	Amount int    // heal amount when Effect == heal
+}
+
 // Item is a piece of local salvage. Slot is one of the equip slots (weapon, head,
 // body, hands, feet) or "" for a non-equippable consumable. Damage/armor are the
 // combat leans it grants when worn. (src/items.ts.)
 type Item struct {
 	ID     string
 	Name   string
+	Desc   string
 	Slot   string
 	Damage int
 	Armor  int
+	Value  int        // gold the market pays; 0 = unsellable
+	Use    *UseEffect // nil when not consumable
 }
 
 // EquipSlots is the canonical equipment layout (the char.equipment fields).
@@ -21,14 +30,59 @@ const Starter = "shiv"
 
 // Items is the local item table (a growing subset of src/items.ts).
 var Items = map[string]Item{
-	"shiv":     {ID: "shiv", Name: "a rusted shiv", Slot: "weapon", Damage: 3},
-	"rebar":    {ID: "rebar", Name: "a length of rebar", Slot: "weapon", Damage: 6},
-	"helm":     {ID: "helm", Name: "a dented scrap helm", Slot: "head", Armor: 1},
-	"plating":  {ID: "plating", Name: "a sheet of scrap plating", Slot: "body", Armor: 2},
-	"charm":    {ID: "charm", Name: "an elven charm", Slot: ""},
-	"antidote": {ID: "antidote", Name: "an antidote vial", Slot: ""},
-	"dust":     {ID: "dust", Name: "a packet of dust", Slot: ""},
-	"shard":    {ID: "shard", Name: "the core shard", Slot: ""},
+	"shiv": {
+		ID: "shiv", Name: "a rusted shiv",
+		Desc: "Sharp enough, if the tetanus doesn't get you first.",
+		Slot: "weapon", Damage: 3, Value: 5,
+	},
+	"rebar": {
+		ID: "rebar", Name: "a length of rebar",
+		Desc: "A meter of rusted reinforcing bar. Crude and heavy, and it caves skulls just fine.",
+		Slot: "weapon", Damage: 6, Value: 10,
+	},
+	"helm": {
+		ID: "helm", Name: "a dented scrap helm",
+		Desc: "A welded pot that's taken worse hits than you have. It'll do.",
+		Slot: "head", Armor: 1, Value: 6,
+	},
+	"plating": {
+		ID: "plating", Name: "a sheet of scrap plating",
+		Desc: "Buckled salvage. Heavy, dull, and just about wearable as a chestpiece.",
+		Slot: "body", Armor: 2, Value: 3,
+	},
+	"charm": {
+		ID: "charm", Name: "an elven charm",
+		Desc: "A woven token of knotted grass and wire, pressed into your hand by grateful refugees.",
+	},
+	"antidote": {
+		ID: "antidote", Name: "an antidote vial",
+		Desc: "A slim vial of antivenom, cold and faintly blue. The maiden's gift.",
+		Use:  &UseEffect{Effect: "cure_poison"},
+	},
+	"dust": {
+		ID: "dust", Name: "a packet of dust",
+		Desc: "Grimy narcotic powder that smells of ozone. It promises to make the pain go away.",
+		Use:  &UseEffect{Effect: "drug"},
+	},
+	"shard": {
+		ID: "shard", Name: "the core shard",
+		Desc: "A sliver of black crystal lattice, warm and faintly humming. A whole node's worth of the dead Grid, somehow still holding a charge.",
+	},
+	"radcell": {
+		ID: "radcell", Name: "a rad-cell",
+		Desc: "A cracked power cell, still warm. Press it to a wound and it jolts you back together.",
+		Use:  &UseEffect{Effect: "heal", Amount: 10}, Value: 12,
+	},
+	"gland": {
+		ID: "gland", Name: "a venom gland",
+		Desc:  "A translucent sac, still beading with toxin. Handle carefully.",
+		Value: 8,
+	},
+	"keycard": {
+		ID: "keycard", Name: "the warden's keycard",
+		Desc:  "A blood-flecked access card, magnetic strip worn smooth.",
+		Value: 20,
+	},
 }
 
 // ItemByID returns the item definition for an id.
@@ -162,4 +216,35 @@ func (p *Player) InventoryNames() []string {
 		names = append(names, ItemName(id))
 	}
 	return names
+}
+
+// MatchItemArg resolves a typed arg against a list of item ids (inventory or ground).
+func MatchItemArg(arg string, ids []string) (string, bool) {
+	arg = strings.ToLower(strings.TrimSpace(arg))
+	if arg == "" {
+		return "", false
+	}
+	for _, id := range ids {
+		if id == arg || strings.Contains(strings.ToLower(id), arg) {
+			return id, true
+		}
+		if strings.Contains(strings.ToLower(ItemName(id)), arg) {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+// AwardXP adds experience and handles level-ups (src/world.ts awardXp).
+func (p *Player) AwardXP(amount int) bool {
+	p.XP += amount
+	leveled := false
+	for p.XP >= p.Level*100 {
+		p.XP -= p.Level * 100
+		p.Level++
+		p.RecalcMaxHP()
+		p.HP = p.MaxHP
+		leveled = true
+	}
+	return leveled
 }

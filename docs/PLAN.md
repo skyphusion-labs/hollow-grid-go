@@ -42,14 +42,22 @@ holding-pit warden grace wall-clock wait on slow boxes.
 
 ## Next (polish / known gaps)
 
-- [ ] **Session-local `resolved` moral state** -- on reconnect, join/defend can
-  reappear in `room.actions` even when faction is already set; server enforces
-  one-time outcomes but bots may spam until they learn. Persist resolved choices
-  on `CharSheet` or derive from faction.
+- [x] **Session-local `resolved` moral state** -- join/defend no longer reappear in
+  `room.actions` after reconnect when faction is already set (derived from
+  `CharSheet.faction`).
 - [ ] **NPCs + `talk` depth** in the tavern (dust-dealer / wench prose beyond
   affordances); smoke green, content optional.
-- [ ] **Stolen-kill vitals sync** -- TS v0.29.9 parity when another player kills
+- [x] **Stolen-kill vitals sync** -- TS v0.29.9 parity when another player kills
   your mob mid-fight (`combat.end` + `inCombat: false` for the displaced fighter).
+
+## TS parity (2026-07-09)
+
+Full command-list parity with the reference world beyond smoke:
+
+- [x] Ground loot piles + `get`/`take`, `drop`, `use`/`drink`/`eat`, `examine`
+- [x] `flee`, `say`, `sit`, `status`/`hp`, `home`, `time`, verb aliases
+- [x] Mob loot tables, XP/level-up on kill, combat poison + poison ticks
+- [x] Sell prices from item `value` (ally bonus preserved)
 
 ## Deferred -- hub-side / trust (upstream)
 

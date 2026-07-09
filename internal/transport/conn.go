@@ -201,14 +201,16 @@ func (s *session) onTick() {
 	switch {
 	case s.player.Target != nil:
 		s.combatRound()
+	case s.player.Poisoned:
+		s.poisonTick()
 	case s.player.Position == "resting":
 		s.regen()
 	}
 }
 
-// regen mends a resting player; the race's regen lean speeds it.
+// regen mends a resting player; the race's regen lean speeds it. Poison blocks regen.
 func (s *session) regen() {
-	if s.player.HP >= s.player.MaxHP {
+	if s.player.Poisoned || s.player.HP >= s.player.MaxHP {
 		return
 	}
 	s.player.HP += 2 + world.RaceByID(s.player.Race).Regen
@@ -281,6 +283,7 @@ func (s *session) sendScene() {
 	s.line(r.Desc)
 	info := r.Info()
 	info.Players = s.srv.hub.PlayersInRoom(s.player.RoomID, s.player.Name)
+	info.Items = s.srv.groundItems(s.player.RoomID)
 	s.event(event.RoomInfo, info)
 	s.event(event.CharVitals, s.player.Vitals())
 	s.event(event.CharAffects, s.player.Affects())
@@ -297,6 +300,9 @@ func (s *session) actions(r *world.Room) world.RoomActionsPayload {
 	}
 	for _, a := range r.Actions {
 		if s.resolved[r.ID+":"+a.Verb] {
+			continue
+		}
+		if (a.Verb == "join" || a.Verb == "defend") && s.player.Faction != "none" {
 			continue
 		}
 		if a.Verb == "join" && world.RaceByID(s.player.Race).Stance == "hunted" {
@@ -411,6 +417,33 @@ func (s *session) handle(cmd string) bool {
 			s.line("You throw yourself at " + m.Name + ".")
 			s.event(event.CharVitals, s.player.Vitals())
 		}
+	case "flee", "f":
+		s.cmdFlee()
+	case "get", "take":
+		s.cmdGet(arg)
+	case "drop":
+		s.cmdDrop(arg)
+	case "use", "drink", "eat":
+		s.cmdUse(arg)
+	case "examine", "exa":
+		s.cmdExamine(arg)
+	case "say", "'":
+		s.cmdSay(arg)
+	case "hp", "status", "st":
+		s.cmdStatus()
+	case "sit":
+		if s.player.Target != nil {
+			s.line("Not while you're fighting for your life.")
+			break
+		}
+		s.player.Position = "sitting"
+		s.line("You sit down.")
+		s.event(event.CharVitals, s.player.Vitals())
+	case "home":
+		s.player.RoomID = s.w.Start().ID
+		s.player.Position = "standing"
+		s.srv.hub.Sync(s.player)
+		s.sendScene()
 	case "whoami", "identity":
 		s.cmdWhoami()
 	case "inventory", "inv", "i":
@@ -457,15 +490,15 @@ func (s *session) handle(cmd string) bool {
 		s.cmdReply(arg)
 	case "yell":
 		s.cmdYell(arg)
-	case "emote":
+	case "emote", "em", "pose":
 		s.cmdEmote(arg)
 	case "steal":
 		s.cmdSteal()
-	case "world", "weather":
+	case "world", "weather", "time":
 		ws := s.w.State()
 		s.event(event.WorldState, ws)
 		s.line(fmt.Sprintf("The sky: %s, %s.", ws.Phase, ws.Weather))
-	case "exits":
+	case "exits", "exit":
 		if r := s.room(); len(r.Exits) == 0 {
 			s.line("There are no obvious ways out.")
 		} else {
@@ -480,6 +513,10 @@ func (s *session) handle(cmd string) bool {
 		s.event(event.CharAffects, s.player.Affects())
 		s.line("You stand clear: no afflictions hold you. (" + identityLine(s.player) + ")")
 	case "rest":
+		if s.player.Target != nil {
+			s.line("Not while you're fighting for your life.")
+			break
+		}
 		s.player.Position = "resting"
 		s.line("You settle against the cold metal and let your breath slow.")
 		s.event(event.CharVitals, s.player.Vitals())
@@ -488,6 +525,10 @@ func (s *session) handle(cmd string) bool {
 		s.line("You get to your feet.")
 		s.event(event.CharVitals, s.player.Vitals())
 	case "sleep":
+		if s.player.Target != nil {
+			s.line("Not while you're fighting for your life.")
+			break
+		}
 		s.player.Position = "resting"
 		s.line("You close your eyes, and the dead network leans close and shows you something.")
 		dream := s.dreamPayload()
@@ -514,7 +555,7 @@ func (s *session) handle(cmd string) bool {
 		s.cmdWitness(arg)
 	case "reckoning", "conscience", "record":
 		s.cmdReckoning()
-	case "defend":
+	case "defend", "oppose":
 		if s.room().ID == "market" {
 			s.defendMarket()
 		} else if a, ok := s.roomAction(verb); ok {
@@ -535,7 +576,7 @@ func (s *session) handle(cmd string) bool {
 		}
 	case "buy":
 		s.cmdBuy(arg)
-	case "resist":
+	case "resist", "refuse":
 		s.cmdResist()
 	case "carouse":
 		s.cmdCarouse()
@@ -555,9 +596,9 @@ func (s *session) handle(cmd string) bool {
 		s.cmdGridstats()
 	case "gridprune":
 		s.cmdGridprune()
-	case "talk":
+	case "talk", "ask":
 		s.cmdTalk()
-	case "forgive":
+	case "forgive", "absolve", "pardon":
 		s.cmdForgive(arg)
 	case "wall":
 		s.cmdWall(arg)
@@ -569,11 +610,11 @@ func (s *session) handle(cmd string) bool {
 		s.cmdGather()
 	case "give":
 		s.cmdGive(arg)
-	case "mend":
+	case "mend", "tend":
 		s.cmdMend(arg)
 	case "treat", "medic":
 		s.cmdTreat()
-	case "free", "rescue", "release", "unlock", "liberate":
+	case "free", "rescue", "release", "unlock", "liberate", "unchain", "unshackle", "untie":
 		s.freeCaptive()
 	case "shelter", "guide":
 		s.cmdShelter()
@@ -582,8 +623,22 @@ func (s *session) handle(cmd string) bool {
 	case "ability", "trait":
 		s.useTrait()
 	case "help", "h", "?":
-		s.line("Commands: look, whoami, world, <direction>, the verbs in room.actions, help, quit.")
+		s.line("Commands: look, whoami, world, <direction>, get/drop/use, flee, say, the verbs in room.actions, help, quit.")
 	default:
+		if verb == "go" && arg != "" {
+			if dest, ok := s.room().Exits[strings.ToLower(arg)]; ok {
+				from := s.player.RoomID
+				s.player.RoomID = dest
+				s.player.Position = "standing"
+				s.srv.hub.Sync(s.player)
+				s.srv.hub.BroadcastRoom(from, s.player.Name+" heads "+strings.ToLower(arg)+".", s.player.Name)
+				s.srv.hub.BroadcastRoom(dest, s.player.Name+" arrives.", s.player.Name)
+				s.sendScene()
+				return false
+			}
+			s.line("You can't go " + arg + " from here.")
+			return false
+		}
 		if dest, ok := s.room().Exits[verb]; ok {
 			from := s.player.RoomID
 			s.player.RoomID = dest
@@ -760,59 +815,6 @@ func (s *session) playerArmor() int {
 	return a
 }
 
-// combatRound resolves one exchange against the player's target, driven by the
-// combat ticker in handleConn. The player strikes first; a kill ends the fight,
-// a lethal counter respawns the player at the Nexus. The whole fight plays out on
-// the combat.* channel so a client/agent reads it as data.
-func (s *session) combatRound() {
-	m := s.player.Target
-	if m == nil {
-		return
-	}
-	pd := s.playerDamage()
-	m.HP -= pd
-	if m.HP < 0 {
-		m.HP = 0
-	}
-	md := 0
-	if m.HP > 0 {
-		md = m.Damage - s.playerArmor()
-		if md < 0 {
-			md = 0
-		}
-		s.player.HP -= md
-	}
-	s.event(event.CombatRound, world.CombatRoundPayload{
-		Mob: m.ID, MobHP: m.HP, MobMaxHP: m.MaxHP, PlayerDmg: pd, MobDmg: md, HP: s.player.HP,
-	})
-	switch {
-	case m.HP <= 0:
-		s.srv.killMob(s.player.RoomID, m)
-		s.player.Target = nil
-		s.player.XP += 5
-		if m.ID == "custodian" {
-			s.player.AddItem("shard")
-			s.line("The Custodian collapses, and the core shard rolls free from its claws.")
-		}
-		s.recordTrace(s.player.RoomID, "slain", s.player.Name+" slew "+m.Name+" here.")
-		s.event(event.CombatEnd, world.CombatEndPayload{Mob: m.ID, Result: "killed"})
-		s.line("You put " + m.Name + " down. The tunnels go quiet.")
-		s.event(event.CharVitals, s.player.Vitals())
-	case s.player.HP <= 0:
-		s.player.Target = nil
-		_ = s.srv.grid.RecordFallen(context.Background(), s.w.Name, s.player.Name, s.player.RoomID, time.Now().UnixMilli())
-		s.player.HP = s.player.MaxHP
-		s.player.RoomID = s.w.Start().ID
-		s.event(event.CombatEnd, world.CombatEndPayload{Mob: m.ID, Result: "died"})
-		s.event(event.CharDied, world.CharDiedPayload{RespawnRoom: s.w.Start().ID, HP: s.player.HP, MaxHP: s.player.MaxHP})
-		s.line("The dark takes you -- and the Grid, stubborn, reknits you at the Cracked Nexus.")
-		s.event(event.CharVitals, s.player.Vitals())
-		s.sendScene()
-	default:
-		s.event(event.CharVitals, s.player.Vitals())
-	}
-}
-
 // considerLine sizes up a mob relative to the player (src/world.ts consider).
 func considerLine(p *world.Player, m *world.Mob) string {
 	ratio := float64(m.MaxHP) / float64(p.MaxHP)
@@ -943,7 +945,7 @@ func (s *session) resolve(a world.Action) {
 	case "join":
 		s.shiftMorality(-15)
 		s.player.Gold += 25
-		s.player.Faction = "Cinder Front"
+		s.player.Faction = "front"
 		s.markResolved(rid, "defend", "join")
 		s.line("You take the Front's coin. It is warm, which is worse. The refugees watch you pocket it and say nothing; they have learned that names are safer unspoken. The Grid logs the transaction. It will remember this longer than you will.")
 	case "witness":
