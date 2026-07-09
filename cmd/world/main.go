@@ -90,6 +90,7 @@ func main() {
 
 	fedCtx, fedCancel := context.WithCancel(context.Background())
 	defer fedCancel()
+	srv.RunWorldLoop(fedCtx)
 	srv.RunFederation(fedCtx)
 
 	httpSrv := &http.Server{

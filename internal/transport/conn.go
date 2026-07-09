@@ -774,17 +774,6 @@ func (s *session) playerArmor() int {
 	return a
 }
 
-// removeMob takes a (dead) mob out of the current room.
-func (s *session) removeMob(m *world.Mob) {
-	r := s.room()
-	for i, mm := range r.Mobs {
-		if mm == m {
-			r.Mobs = append(r.Mobs[:i], r.Mobs[i+1:]...)
-			return
-		}
-	}
-}
-
 // combatRound resolves one exchange against the player's target, driven by the
 // combat ticker in handleConn. The player strikes first; a kill ends the fight,
 // a lethal counter respawns the player at the Nexus. The whole fight plays out on
@@ -812,7 +801,7 @@ func (s *session) combatRound() {
 	})
 	switch {
 	case m.HP <= 0:
-		s.removeMob(m)
+		s.srv.killMob(s.player.RoomID, m)
 		s.player.Target = nil
 		s.player.XP += 5
 		if m.ID == "custodian" {
