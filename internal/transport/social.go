@@ -309,6 +309,7 @@ func (s *session) cmdCache(arg string) {
 	s.player.Gold -= amount
 	s.srv.addCache(s.player.RoomID, amount)
 	s.shiftMorality(2)
+	s.deed("aided")
 	s.persist()
 	s.srv.hub.Sync(s.player)
 	s.recordTrace(s.player.RoomID, "aid", s.player.Name+" left aid here for whoever comes next.")

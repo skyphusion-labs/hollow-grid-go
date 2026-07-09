@@ -21,21 +21,22 @@ import (
 
 // Server wires the HTTP surface for one world.
 type Server struct {
-	world    *world.World
-	store    store.CharStore
-	grid     grid.Hub
-	hub      *Hub
-	log      *slog.Logger
-	conns    sync.WaitGroup
-	admins   map[string]bool
-	caches   map[string]int // room id -> gold left for strangers
-	forgiven map[forgivenPair]bool
-	cages    map[string]int64    // room id -> unix ms when refill completes (0 = ready)
-	saved    map[string][]string // player name -> people they rescued
-	deeds    map[string]map[string]int
-	kept     map[keptPair]bool
-	lastCast int
-	mu       sync.Mutex
+	world       *world.World
+	store       store.CharStore
+	grid        grid.Hub
+	hub         *Hub
+	log         *slog.Logger
+	conns       sync.WaitGroup
+	admins      map[string]bool
+	caches      map[string]int              // room id -> gold left for strangers
+	localTraces map[string][]grid.EchoTrace // room id -> node memory for grid.echo
+	forgiven    map[forgivenPair]bool
+	cages       map[string]int64    // room id -> unix ms when refill completes (0 = ready)
+	saved       map[string][]string // player name -> people they rescued
+	deeds       map[string]map[string]int
+	kept        map[keptPair]bool
+	lastCast    int
+	mu          sync.Mutex
 }
 
 type keptPair struct{ keeper, fallen string }
@@ -56,8 +57,9 @@ func NewServer(w *world.World, st store.CharStore, gh grid.Hub, admins []string,
 	}
 	return &Server{
 		world: w, store: st, grid: gh, hub: NewHub(), log: log,
-		admins: adm, caches: map[string]int{}, forgiven: map[forgivenPair]bool{},
-		cages: map[string]int64{}, saved: map[string][]string{},
+		admins: adm, caches: map[string]int{}, localTraces: map[string][]grid.EchoTrace{},
+		forgiven: map[forgivenPair]bool{},
+		cages:    map[string]int64{}, saved: map[string][]string{},
 		deeds: map[string]map[string]int{}, kept: map[keptPair]bool{},
 	}
 }
