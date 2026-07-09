@@ -10,9 +10,10 @@ this is a from-scratch port of the **world half** -- a single autonomous game wo
 Grid's language-agnostic wire protocol and can (eventually) join the federation as a node. Players (or
 LLM agents) connect over WebSocket and play with plain-text commands.
 
-**Status:** a fully playable STANDALONE world. The definition of done is the upstream `smoke.mjs`
-conformance suite; prod Rust Choir baseline **158 ok / 0 fail** against live hub + Dustfall
-(2026-07-09); federation engine HTTP client remains the open seam (`internal/store`).
+**Status:** a fully playable world, standalone or federated. The definition of done
+is the upstream `smoke.mjs` conformance suite (**135 checks**); prod Rust Choir
+baseline **158 ok / 0 fail / 1 skip** against live hub + Dustfall (2026-07-09).
+Live at `wss://rustchoir.skyphusion.org/ws`.
 
 ## The Grid federation (the shared map)
 
@@ -32,8 +33,8 @@ conformance suite; prod Rust Choir baseline **158 ok / 0 fail** against live hub
 
 A "world" is content on a generic engine; the shared backend (the Grid Hub) is what makes it a
 federation. A Go world is a first-class citizen of the same Grid as a TS world because the wire protocol
-is deliberately language-agnostic. The federation client is the open seam here (`internal/store`), not
-yet implemented.
+is deliberately language-agnostic. Federation uses `internal/grid/RemoteHub` when
+`GRID_HUB_URL` is set; `internal/store` remains the offline fallback seam.
 
 ## The contract (build to the upstream wire protocol)
 
@@ -66,7 +67,7 @@ go build ./...
 
 # Play / score it with the upstream client + conformance suite (from the the-hollow-grid repo):
 wscat -c ws://localhost:8790/ws
-MUD_URL=ws://localhost:8790/ws node smoke.mjs    # the scoreboard: watch the 56/134 count climb
+MUD_URL=ws://localhost:8790/ws node smoke.mjs    # 135 checks; set DUSTFALL_URL for federation phase
 
 # Container (multi-stage static CGO-off binary on distroless):
 docker build -t hollow-grid-go .
@@ -74,27 +75,26 @@ docker run -d --name hollow-grid-go -p 8790:8790 -v hollow-grid-go-data:/data ho
 ```
 
 **Toolchain:** `go.mod` requires **Go 1.26.x** (`go 1.26.4`) and the Dockerfile builds on `golang:1.26`.
-NOTE: `.github/workflows/ci.yml` currently pins `setup-go` to `1.22`, a drift from `go.mod` to reconcile
-(a 1.22 toolchain cannot build a module that declares `go 1.26.4`). When touching CI, align it to
-`go.mod` (the intent stated in `release.yml`: "Go is pinned to go.mod so CI never drifts").
+`ci.yml` and `release.yml` pin `setup-go` to `go.mod` (do not drift).
 
 ## Verifying changes
 
 Two layers. (1) `go test ./...` is the local gate: unit tests plus transport conformance tests that
 drive REAL WebSocket sessions (`internal/transport/conn_test.go`). Run it plus `go vet ./...` and
 `gofmt -l .` (clean) before committing. (2) The upstream `smoke.mjs` is the definition-of-done
-scoreboard: point it at a running server (or the container) and the green count is the real progress
-metric (56/134 today). Assert on the `@event` channel, not prose -- it is the machine-readable truth.
+scoreboard: point it at a running server (or the container). Prod baseline (2026-07-09):
+**158 ok / 0 fail / 1 skip** on Rust Choir with hub + Dustfall. Assert on `@event`, not prose.
 
 ## Architecture
 
 ```
 cmd/world/          the server entrypoint (flags, HTTP server, graceful shutdown)
 internal/event/     the @event channel framing
+internal/grid/      Grid Hub HTTP client + LocalHub fallback
 internal/world/     the world model: rooms, races, mobs, items, the living clock, @event payloads
-internal/store/     the CharStore interface + a dependency-free FileStore (the federation seam)
-internal/transport/ the player transport: the WebSocket server and the session select-loop
-docs/               protocol notes (ARCHITECTURE.md, COMMANDS.md, PLAN.md)
+internal/store/     the CharStore interface + a dependency-free FileStore (offline fallback)
+internal/transport/ the player transport: WebSocket server, session select-loop, multiplayer hub
+docs/               ARCHITECTURE.md, COMMANDS.md, PLAN.md, WORLD.md
 Dockerfile          multi-stage build -> distroless
 ```
 

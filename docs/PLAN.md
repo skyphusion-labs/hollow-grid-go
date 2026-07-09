@@ -1,71 +1,88 @@
 # Build plan & status
 
 Porting the Hollow Grid world framework to Go, against the upstream
-`docs/protocol.md`. The scoreboard is the upstream `smoke.mjs` (134 checks at the
-time of writing): **build the port to pass it, phase by phase.** Prod Rust Choir
-(Rust Choir + Dustfall) baseline: **158 ok / 0 fail / 1 skip** (2026-07-09); the
-skip is the warden grace wall-clock wait on slow boxes -- fixed on branch
-`feat/warden-grace-window`.
+`docs/protocol.md`. The scoreboard is the upstream `smoke.mjs` (**135 checks**):
+**build the port to pass it, phase by phase.** Prod Rust Choir (hub + Dustfall
+live) baseline: **158 ok / 0 fail / 1 skip** (2026-07-09); the skip is the
+holding-pit warden grace wall-clock wait on slow boxes.
 
 ## Done
 
-**Phase 0 — transport foundation**
+**Phase 0 -- transport foundation**
 - [x] HTTP server, graceful shutdown, `/health` + `/health/deep`
 - [x] `/ws` WebSocket, UTF-8 text, CRLF lines
 - [x] login flow: banner → name → race menu → play; name-based identity
 - [x] the `@event` channel framing
 
-**Phase 1 — the world**
-- [x] the 7 canonical races, with Cinder Front stance + signature abilities (Requisition + cooldown, the heals, Forage)
-- [x] the canonical opening map (the Cracked Nexus, tavern, market, holding pit, workshop, roof, tunnels) + the wastes (Ash Flats, Scorch Road, Refugee Waystation)
-- [x] items / inventory / equipment (`wield`/`remove` → `char.equipment`), the starter shiv, `title`
-- [x] mobs (`room.info.mobs`), `consider`, `look <mob>`
-- [x] **async combat** — `attack` → `combat.start/round/end` on a tick, death → respawn
-- [x] the **living-world heartbeat** — `world.state` clock (pure function of elapsed time), `rest` + regen
-- [x] **the Cinder Front moral arc** — `join` → `faction:front`; the ash-sworn (kapo) brand for hunted races; `room.actions` moral choices with `valence` (`grave` for a hunted join); `defy`; the honest market refuses collaborators
-- [x] the Refugee Waystation — `talk` reacts to standing, `treat` (medic gated by the collective tide, graceful without a hub)
-- [x] the tinker **economy** — `list`/`buy` gear for gold (20 starting gold)
-- [x] the **holding-pit rescue** — beat the warden, `free` the captive → `grid.rescued` (named, +morality, unfarmable); post-kill **warden grace window** (v0.29.3) and antidote affordance gate (v0.29.8)
-- [x] **dreams** — `sleep` → `char.dream`, a mirror of your record
-- [x] **persistence** — the canonical `CharSheet` via `CharStore`/`FileStore`; resume on a known name
-- [x] **Docker** (multi-stage -> distroless) + **CI** (GitHub Actions: `go vet` + build, unit tests + the upstream conformance suite; GHCR push + auto-roll to biafra on `main` via `fleet-chezmoi` `rust-choir-roll`)
+**Phase 1 -- the world**
+- [x] the 7 canonical races, with Cinder Front stance + signature abilities
+- [x] the canonical opening map + the wastes (Ash Flats, Scorch Road, Refugee Waystation)
+- [x] items / inventory / equipment, the starter shiv, `title`
+- [x] mobs, `consider`, `look <mob>`
+- [x] **async combat** on a tick, death → respawn
+- [x] the **living-world heartbeat** -- `world.state`, `rest` + regen
+- [x] **the Cinder Front moral arc** -- join, ash-sworn, defy, market refusal
+- [x] the Refugee Waystation -- `talk`, `treat` (tide-gated medic)
+- [x] the tinker **economy** -- `list`/`buy`
+- [x] the **holding-pit rescue** -- warden, `free` → `grid.rescued`; warden grace window + antidote affordance gate
+- [x] **dreams** -- `sleep` → `char.dream`
+- [x] **persistence** -- `CharStore`/`FileStore`; resume on a known name
+- [x] **Docker** + **CI** (GHCR push + auto-roll to biafra via `rust-choir-roll`)
 
-## Next (world-local)
+**Phase 2 -- multiplayer and federation (world-side)**
+- [x] **Multiplayer** -- session registry, `tell`/`reply`/`yell`/`emote`, `room.info.players`
+- [x] **`listen` + `ping`** -- `grid.transmission`, `grid.echo`, `grid.federation`
+- [x] **`/map.svg`** -- world map endpoint
+- [x] **Rust Choir identity** -- Grid Gate tract, archivist voice (see `docs/WORLD.md`)
+- [x] **the redemption arc** -- Returned / ash-marked penance
+- [x] **the data-leech zone** -- sump → floodgate → Cold Storage Row, core-shard quest
+- [x] **the Cinder Front stronghold (endgame)** -- checkpoint, cages, Ashmonger
+- [x] **Grid Hub HTTP client** -- `internal/grid/RemoteHub`, `worlds`/`travel`, tide,
+  ledger, gridcast, presence, rescued/fallen rolls (production: `GRID_HUB_URL`)
 
-- [x] **Multiplayer** -- session registry, `tell`/`reply`/`yell`/`emote`, `room.info.players` with standing
-- [x] **`listen` + `ping`** -- `grid.transmission`, `grid.echo`, `grid.federation` (local hub fallback)
-- [x] **`/map.svg`** -- minimal world map endpoint
-- [x] **Rust Choir identity** -- default world name, Grid Gate tract linked from tunnels (see `docs/WORLD.md`)
-- [ ] **NPCs + `talk`** in the tavern (the dust-dealer / wench; `room.actions` social affordances) -- smoke green; content depth optional
-- [x] **the redemption arc** — the way back from the cinders (a Front member / ash-sworn redeeming)
-- [x] **the data-leech zone** — the sump → floodgate → Cold Storage Row, the data-leech mob, the core-shard quest from the stranded operator
-- [x] **the Cinder Front stronghold (endgame)** — the muster yard past the checkpoint/gate, Front troopers, the cages, the **Ashmonger** boss on the dais
+## Next (polish / known gaps)
 
-## Next (architecture)
+- [ ] **Session-local `resolved` moral state** -- on reconnect, join/defend can
+  reappear in `room.actions` even when faction is already set; server enforces
+  one-time outcomes but bots may spam until they learn. Persist resolved choices
+  on `CharSheet` or derive from faction.
+- [ ] **NPCs + `talk` depth** in the tavern (dust-dealer / wench prose beyond
+  affordances); smoke green, content optional.
+- [ ] **Stolen-kill vitals sync** -- TS v0.29.9 parity when another player kills
+  your mob mid-fight (`combat.end` + `inCombat: false` for the displaced fighter).
 
-- [x] **Multiplayer** -- a shared session registry on the `Server` plus a broadcast
-  path, so `room.info.players` lists others (with `standing`/`ash-sworn`), and
-  `tell`/`reply`/`yell`/`emote` work.
-- [ ] **Grid Hub HTTP client** -- fleet nodes cannot use CF service bindings today;
-  needs hub ingress or a relay Worker (Phase 3).
+## Deferred -- hub-side / trust (upstream)
 
-## Deferred — the federation engine (not this repo)
-
-The Grid Hub backend (the `GridHubApi`: the shared ledger, the global faction
-tide, cross-world chat, the world registry, the rescued/memorial rolls, presence,
-travel) is the upstream's other half. This port builds the world side and the
-`CharStore` seam only. When the hub exposes an HTTP ingress for external nodes, a
-`GridHubApi` client lands here as Phase 3 — additive, best-effort, never blocking
-play. Until then these checks (`grid.federation`, `grid.echo`, cross-world `who`,
-the persistent rolls, `travel`, `gridcast`) stay red by design.
+The Grid Hub **server** (authoritative D1 + GridHub DO) lives in `the-hollow-grid`.
+Trust hardening (per-world keys, leased progression deltas, commit validation) is
+documented in `docs/federation.md` section 10 and is not required for the current
+single-operator fleet (hollow + Dustfall + Rust Choir).
 
 ## Conformance: how to read the scoreboard
 
 ```sh
-# against a running server (host) or the container
+# single-world (federation phase SKIPs if DUSTFALL_URL unset)
 MUD_URL=ws://localhost:8790/ws node /path/to/the-hollow-grid/smoke.mjs
-# DUSTFALL_URL too, or it SKIPs the second-world federation phase
+
+# full federation phase (second TS world must be live)
+MUD_URL=ws://localhost:8790/ws \
+DUSTFALL_URL=ws://localhost:8788/ws \
+node /path/to/the-hollow-grid/smoke.mjs
+
+# prod Rust Choir
+MUD_URL=wss://rustchoir.skyphusion.org/ws \
+DUSTFALL_URL=wss://dustfall.skyphusion.org/ws \
+node smoke.mjs
 ```
 
-A green run is the definition of done. The remaining red is the deferred work
-above, not defects.
+Assert on `@event`, not prose. A green run is the definition of done for the
+world port; remaining red on standalone-only runs is expected when federation
+targets are unreachable.
+
+## Load testing (mud-bots)
+
+LLM agents live in the separate [`mud-bots`](https://github.com/SkyPhusion/mud-bots)
+repo (`hollow-grid/bot.mjs`, GHCR `mud-bots-hg`). Fleet layout, AIG tokens, and
+the 11-bot soak (3 hollow + 3 dustfall + 5 rustchoir) are documented in
+`fleet-chezmoi/system/stacks/biafra/mud-bots/README.md`. Bot findings append to
+`*-bugs.jsonl`; server-side regressions belong in hollow-grid-go issues.

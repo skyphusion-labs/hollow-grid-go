@@ -24,11 +24,11 @@ executable conformance suite). Nothing here invents protocol; it implements it.
    the living clock)      Grid later)
 ```
 
-There is no shared mutable game state behind a lock. Each connection owns its
-own session, and the world's content (rooms, the room graph, the bestiary) is
-read-mostly. The few places that mutate shared world state (a killed mob leaving
-a room, a freed captive) are single-player-correct today; the multiplayer
-refinement is a shared session registry (see PLAN).
+There is no shared mutable game state behind a lock on the session loop. Each
+connection owns its own session goroutine; the world's content (rooms, the room
+graph, the bestiary) is read-mostly. Shared **presence** (who is in which room,
+tell/yell/emote routing) lives in `internal/transport/hub.go`, a session registry
+guarded by a mutex; mob death and rescue state are world-wide on the `Server`.
 
 ## The session select-loop (the keystone)
 
@@ -121,16 +121,30 @@ Identity is name-based (protocol.md s1): a known name resumes its sheet and skip
 the race menu; a new name chooses a race once. Persistence is best-effort —
 a store failure is logged but never blocks play.
 
+## Federation (`internal/grid`)
+
+The Grid Hub backend remains the upstream's other half (`the-hollow-grid/grid-hub/`).
+This port implements the **world-side client**:
+
+- **`LocalHub`** (default when `GRID_HUB_URL` is unset): in-process fallback so
+  standalone play and smoke's single-world phases work without Cloudflare.
+- **`RemoteHub`** (when `GRID_HUB_URL` + `GRID_HUB_TOKEN` are set): HTTP JSON-RPC
+  to `POST /rpc` on the hub (production: `https://grid-hub.skyphusion.org/rpc`).
+
+`RunFederation()` heartbeats presence, polls gridcast, and syncs tide on a 2s loop.
+Every hub call is best-effort; failures are logged and play continues on local state.
+
+The `CharStore` seam (`internal/store`) still holds the offline fallback; when the
+hub is bound, canonical `CharSheet` fields round-trip through `loadCharacter` /
+`commitCharacter` on connect and checkpoint.
+
 ## What is deliberately NOT here
 
-- **The federation engine.** The Grid Hub (the `GridHubApi`: the shared ledger,
-  the global tide, cross-world chat, the registry, the rescued/memorial rolls) is
-  the upstream's other half and is owned by a separate effort. This port builds
-  only the world side and the `CharStore` seam; it does not invent hub or wire
-  shapes. A standalone world is fully playable without it.
-- **Multiplayer.** Sessions do not yet share a presence registry, so
-  `room.info.players`, `tell`/`yell`/`emote`, and "others see your brand" are not
-  wired. That is the next architecture step (see PLAN).
+- **The Grid Hub server itself.** Tide, ledger, registry, and cross-world rolls
+  are authoritative in the upstream hub Worker. This repo is a world node only.
+- **Full trust hardening.** Per-world keys, leased progression deltas, and
+  server-side validation of commits are design targets in `the-hollow-grid/docs/federation.md`
+  but not enforced yet (fine while one operator runs all worlds).
 
 ## Testing & conformance
 
@@ -138,6 +152,8 @@ a store failure is logged but never blocks play.
   `httptest` server (login, movement, combat to a kill, the moral arc, rescue,
   the economy, the living world). Tests drain in-flight sessions before temp-dir
   cleanup so a disconnect-time persist never races.
-- The real bar is the upstream `smoke.mjs` (134 checks): point it at a running
-  server or the container and it asserts the exact `@event` truth. The port is
-  built to turn that scoreboard green, system by system.
+- The real bar is the upstream `smoke.mjs` (**135 checks**): point it at a running
+  server or the container and it asserts the exact `@event` truth. Set
+  `DUSTFALL_URL` too for the federation phase (travel, cross-world identity).
+  Prod Rust Choir baseline (2026-07-09): **158 ok / 0 fail / 1 skip** with hub +
+  Dustfall live.
