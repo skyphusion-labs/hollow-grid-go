@@ -123,16 +123,27 @@ func (s *session) cmdGridprune() {
 }
 
 func (s *session) cmdWhoami() {
-	sheet := s.player.Sheet()
+	localFaction := s.player.Faction
+	localMorality := s.player.Morality
+	localTitle := s.player.Title
 	if s.srv.grid.Remote() {
 		if canon, _, err := s.srv.grid.LoadCharacter(context.Background(), s.player.Name); err == nil {
 			applyHubSheet(s.player, canon)
-			sheet = s.player.Sheet()
+			// Session-local standing wins over a stale hub read (commit is best-effort).
+			if localFaction == "ally" || localFaction == "front" {
+				s.player.Faction = localFaction
+			}
+			if localMorality != 0 && s.player.Morality == 0 && canon.Morality == 0 {
+				s.player.Morality = localMorality
+			}
+			if localTitle != "" {
+				s.player.Title = localTitle
+			}
 		} else {
 			s.line("(the Grid is unreachable; showing your local self)")
 		}
 	}
-	s.event(event.CharIdentity, sheet)
+	s.event(event.CharIdentity, s.player.Sheet())
 	s.line("The Grid reads you back: " + identityLine(s.player))
 }
 

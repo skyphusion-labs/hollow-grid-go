@@ -36,7 +36,7 @@ func NewHub() *Hub {
 
 // Register adds a player and returns their outbound push channel.
 func (h *Hub) Register(p *world.Player) chan string {
-	ch := make(chan string, 16)
+	ch := make(chan string, 64)
 	lp := &livePlayer{
 		name: p.Name, room: p.RoomID, title: p.Title,
 		faction: p.Faction, race: p.Race, ashsworn: p.Ashsworn, morality: p.Morality,
@@ -91,12 +91,20 @@ func (h *Hub) ReplyTo(name string) string {
 	return ""
 }
 
-// Find returns a live player by exact name (case-sensitive).
+// Find returns a live player by name (case-insensitive).
 func (h *Hub) Find(name string) (*livePlayer, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	lp, ok := h.players[name]
-	return lp, ok
+	if lp, ok := h.players[name]; ok {
+		return lp, true
+	}
+	lower := strings.ToLower(strings.TrimSpace(name))
+	for n, lp := range h.players {
+		if strings.ToLower(n) == lower {
+			return lp, true
+		}
+	}
+	return nil, false
 }
 
 // PlayersInRoom lists others in the same room for room.info.
