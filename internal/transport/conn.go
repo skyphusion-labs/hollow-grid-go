@@ -1170,7 +1170,7 @@ func (s *session) cmdTell(arg string) {
 	}
 	s.srv.hub.SetReplyTo(target.name, s.player.Name)
 	tellLine := s.player.Name + " tells you, \"" + msg + "\"" + crlf
-	s.srv.hub.push(target.name, tellLine+eventTellLine(s.player.Name, msg))
+	s.srv.hub.PushReliable(target.name, tellLine+eventTellLine(s.player.Name, msg))
 	s.line("You tell " + target.name + ", \"" + msg + "\"")
 }
 
