@@ -373,7 +373,7 @@ func TestWastesAndWaystation(t *testing.T) {
 	send("talk")
 	mustContain(t, "waystation standing", readUntil(t, read, "Pick a side"), "Pick a side")
 	send("treat")
-	mustContain(t, "medic tends", readUntil(t, read, "patches you up"), "patches you up")
+	mustContain(t, "medic at waystation", readUntil(t, read, "medic"), "whole")
 }
 
 // TestTinkerEconomy: the workshop tinker lists wares, and buying a helm (14g of

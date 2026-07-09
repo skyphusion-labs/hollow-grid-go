@@ -28,6 +28,11 @@ func (s *Server) RunFederation(ctx context.Context) {
 			case <-ticker.C:
 				s.pollGridcasts(ctx)
 				s.reportPresence(ctx)
+				if t, err := s.grid.Tide(ctx); err == nil {
+					s.mu.Lock()
+					s.lastTide = t
+					s.mu.Unlock()
+				}
 			}
 		}
 	}()

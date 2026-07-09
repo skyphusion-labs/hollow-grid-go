@@ -51,6 +51,7 @@ const (
 	CommTell         = "comm.tell"
 	CommYell         = "comm.yell"
 	CharForgiven     = "char.forgiven"
+	CharTreated      = "char.treated"
 	PlayerRead       = "player.read"
 	ServerAnnounce   = "server.announce"
 	NodeCache        = "node.cache"

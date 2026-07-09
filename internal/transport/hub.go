@@ -201,6 +201,22 @@ func pushBestEffort(lp *livePlayer, text string) {
 	}
 }
 
+// PushReliableRoom sends prose to everyone in a room except skip, retrying until
+// each session reads it or times out (used for emotes and other room-visible comms).
+func (h *Hub) PushReliableRoom(room, text, skip string) {
+	h.mu.RLock()
+	targets := make([]*livePlayer, 0, 4)
+	for name, lp := range h.players {
+		if lp.room == room && name != skip {
+			targets = append(targets, lp)
+		}
+	}
+	h.mu.RUnlock()
+	for _, lp := range targets {
+		pushReliable(lp, text)
+	}
+}
+
 // BroadcastRoom sends prose to everyone in a room except skip (if non-empty).
 func (h *Hub) BroadcastRoom(room, text, skip string) {
 	h.mu.RLock()
