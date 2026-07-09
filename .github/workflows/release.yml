@@ -8,7 +8,8 @@ name: release
 #     the port is in progress (a partial pass never reds the build)
 #   - push to GHCR (:<sha> + :latest) on push to main only
 #
-# Deploy (pull + restart on the target host) stays a separate deliberate step.
+# After a green GHCR push on main, dispatches fleet-chezmoi rust-choir-roll to pull +
+# redeploy on biafra (requires org secrets FLEET_DISPATCH_TOKEN + GHCR_READ_PAT).
 #
 # Public repo -> GitHub-hosted ubuntu-latest (fork-safe), never the fleet pool.
 # GHCR auth uses the built-in GITHUB_TOKEN (no PAT) with
@@ -92,7 +93,13 @@ jobs:
         run: |
           docker push "$IMAGE:${GITHUB_SHA}"
           docker push "$IMAGE:latest"
-          echo "Pushed hollow-grid-go:${GITHUB_SHA}. Deploy (pull + restart on host) is a separate step."
+          echo "Pushed hollow-grid-go:${GITHUB_SHA}."
+
+      - name: Dispatch rust-choir roll to fleet-chezmoi (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          FLEET_DISPATCH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
+        run: bash .github/scripts/dispatch-fleet-rust-choir-roll.sh
 
       - name: Clean up
         if: always()
