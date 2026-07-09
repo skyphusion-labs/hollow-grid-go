@@ -407,6 +407,7 @@ func (s *session) defendMarket() {
 	s.player.AddItem("charm")
 	s.markResolved(r.ID, "defend", "join")
 	s.persist()
+	s.srv.contributeTide(10)
 	s.srv.hub.Sync(s.player)
 	s.srv.hub.BroadcastRoom(r.ID, s.player.Name+" stands with the elves against the Cinder Front.", s.player.Name)
 	s.recordTrace(r.ID, "oath", s.player.Name+" stood with the free folk here.")

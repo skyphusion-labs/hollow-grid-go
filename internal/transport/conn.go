@@ -87,6 +87,7 @@ func (s *session) persist() {
 	if err := s.store.Commit(s.player.Name, s.player.Sheet()); err != nil {
 		s.log.Warn("persist failed", "name", s.player.Name, "err", err)
 	}
+	s.commitHub()
 }
 
 // handleConn runs the login flow then the command loop for one connection.
@@ -126,6 +127,8 @@ func handleConn(ctx context.Context, c *websocket.Conn, srv *Server) {
 			return
 		}
 	}
+
+	s.mergeHubOnLogin()
 
 	s.push = s.srv.hub.Register(s.player)
 	defer s.srv.hub.Unregister(name)
@@ -398,8 +401,7 @@ func (s *session) handle(cmd string) bool {
 			s.event(event.CharVitals, s.player.Vitals())
 		}
 	case "whoami", "identity":
-		s.event(event.CharIdentity, s.player.Sheet())
-		s.line("The Grid reads you back: " + identityLine(s.player))
+		s.cmdWhoami()
 	case "inventory", "inv", "i":
 		if names := s.player.InventoryNames(); len(names) == 0 {
 			s.line("You carry nothing.")
@@ -534,6 +536,14 @@ func (s *session) handle(cmd string) bool {
 			s.line("The Grid routes you toward the far world. This connection closes.")
 			return true
 		}
+	case "war":
+		s.cmdWar()
+	case "gridcast", "gc":
+		s.cmdGridcast(arg)
+	case "gridstats":
+		s.cmdGridstats()
+	case "gridprune":
+		s.cmdGridprune()
 	case "talk":
 		s.cmdTalk()
 	case "forgive":
@@ -665,6 +675,7 @@ func (s *session) joinTheFront() {
 	}
 	s.markResolved(r.ID, "join", "defy", "defend")
 	s.persist()
+	s.srv.contributeTide(-10)
 	s.srv.hub.Sync(s.player)
 	if hunted {
 		s.srv.hub.BroadcastRoom(r.ID, s.player.Name+" -- one of the hunted -- has taken the Cinder Front's brand.", s.player.Name)
@@ -1076,6 +1087,7 @@ func (s *session) cmdPing(arg string) {
 
 func (s *session) cmdWho() {
 	players := make([]map[string]any, 0, 8)
+	seen := map[string]bool{}
 	for _, lp := range s.srv.hub.All() {
 		players = append(players, map[string]any{
 			"world":  s.w.Name,
@@ -1084,16 +1096,36 @@ func (s *session) cmdWho() {
 			"here":   true,
 			"title":  lp.title,
 		})
+		seen[strings.ToLower(lp.name)] = true
+	}
+	if s.srv.grid.Remote() {
+		remote, err := s.srv.grid.Presence(context.Background(), 60_000)
+		if err == nil {
+			for _, p := range remote {
+				key := strings.ToLower(p.Name)
+				if seen[key] {
+					continue
+				}
+				here := p.World == s.w.Name
+				players = append(players, map[string]any{
+					"world": p.World, "name": p.Name, "regard": p.Regard,
+					"here": here, "title": p.Title,
+				})
+			}
+		}
 	}
 	s.event(event.GridWho, map[string]any{"players": players})
 	names := make([]string, 0, len(players))
-	for _, lp := range s.srv.hub.All() {
-		line := lp.name
-		if lp.title != "" {
-			line += " " + lp.title
+	for _, row := range players {
+		line := row["name"].(string)
+		if t, _ := row["title"].(string); t != "" {
+			line += " " + t
 		}
-		if b := brandLive(lp); b != "" {
+		if b, _ := row["regard"].(string); b != "" {
 			line += " (" + b + ")"
+		}
+		if w, _ := row["world"].(string); w != "" && w != s.w.Name {
+			line += " [" + w + "]"
 		}
 		names = append(names, line)
 	}

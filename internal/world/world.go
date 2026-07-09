@@ -285,6 +285,15 @@ func (p *Player) Sheet() CharSheet {
 	}
 }
 
+// RecalcMaxHP updates max HP from level and race after federation merges.
+func (p *Player) RecalcMaxHP() {
+	r := RaceByID(p.Race)
+	p.MaxHP = maxHPFor(p.Level, r.HPMod)
+	if p.HP > p.MaxHP {
+		p.HP = p.MaxHP
+	}
+}
+
 // Vitals renders the player as a char.vitals payload.
 func (p *Player) Vitals() CharVitalsPayload {
 	pos := p.Position

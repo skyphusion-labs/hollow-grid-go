@@ -4,6 +4,7 @@
 package transport
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -33,6 +34,7 @@ type Server struct {
 	saved    map[string][]string // player name -> people they rescued
 	deeds    map[string]map[string]int
 	kept     map[keptPair]bool
+	lastCast int
 	mu       sync.Mutex
 }
 
@@ -191,12 +193,18 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 // Returns 503 only when a critical check fails.
 func (s *Server) healthDeep(w http.ResponseWriter, r *http.Request) {
 	worldOK := s.world.Start() != nil
+	hubOK := true
+	hubLatency := 0
+	if s.grid.Remote() {
+		start := time.Now()
+		if err := gridPing(r.Context(), s.grid); err != nil {
+			hubOK = false
+		}
+		hubLatency = int(time.Since(start).Milliseconds())
+	}
 	checks := map[string]any{
-		"world": map[string]any{"ok": worldOK, "latency_ms": 0, "critical": true},
-		// Non-critical: federation never blocks play (docs/federation.md s8).
-		// Stubbed reachable while standalone; becomes a real tide() probe when the
-		// federation client lands (Phase 3).
-		"grid_hub": map[string]any{"ok": true, "latency_ms": 0, "critical": false},
+		"world":    map[string]any{"ok": worldOK, "latency_ms": 0, "critical": true},
+		"grid_hub": map[string]any{"ok": hubOK, "latency_ms": hubLatency, "critical": false},
 	}
 	code := http.StatusOK
 	if !worldOK {
@@ -205,6 +213,14 @@ func (s *Server) healthDeep(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, code, map[string]any{
 		"ok": worldOK, "ts": time.Now().UnixMilli(), "world": s.world.Name, "checks": checks,
 	})
+}
+
+func gridPing(ctx context.Context, h grid.Hub) error {
+	if rh, ok := h.(*grid.RemoteHub); ok {
+		return rh.Ping(ctx)
+	}
+	_, err := h.Tide(ctx)
+	return err
 }
 
 // ws upgrades to a WebSocket and runs one player session. Origin checks are

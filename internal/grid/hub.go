@@ -69,6 +69,25 @@ type Fallen struct {
 	At    int64  `json:"at"`
 }
 
+// Cast is one cross-world chat line from the shared hub feed.
+type Cast struct {
+	ID     int    `json:"id"`
+	World  string `json:"world"`
+	Sender string `json:"sender"`
+	Text   string `json:"text"`
+}
+
+// LedgerKind is one row from ledgerStats().
+type LedgerKind struct {
+	Kind  string `json:"kind"`
+	Count int    `json:"count"`
+}
+
+// PruneResult is the return value of pruneLedgerKinds().
+type PruneResult struct {
+	Removed int `json:"removed"`
+}
+
 // Hub is the GridHubApi surface worlds call over the federation backend.
 type Hub interface {
 	Record(ctx context.Context, world, node, kind, text string, at int64) error
@@ -79,12 +98,17 @@ type Hub interface {
 	CommitCharacter(ctx context.Context, name string, sheet CharSheet) error
 	Register(ctx context.Context, world, url string) error
 	ListWorlds(ctx context.Context) ([]WorldInfo, error)
+	GridCast(ctx context.Context, world, sender, text string) error
+	CastsSince(ctx context.Context, sinceID, limit int) ([]Cast, error)
+	LedgerStats(ctx context.Context) ([]LedgerKind, error)
+	PruneLedgerKinds(ctx context.Context, kinds []string) (PruneResult, error)
 	ReportPresence(ctx context.Context, world string, entries []PresenceEntry, at int64) error
 	Presence(ctx context.Context, maxAgeMs int64) ([]Presence, error)
 	RecordRescued(ctx context.Context, world, name, savedBy string, at int64) error
 	RecentRescued(ctx context.Context, limit int) ([]Rescued, error)
 	RecordFallen(ctx context.Context, world, name, room string, at int64) error
 	RecentFallen(ctx context.Context, limit int) ([]Fallen, error)
+	Remote() bool
 }
 
 // PresenceEntry is one player in a presence heartbeat.
@@ -242,4 +266,16 @@ func (h *LocalHub) RecentFallen(_ context.Context, limit int) ([]Fallen, error) 
 		return h.fallen, nil
 	}
 	return h.fallen[:limit], nil
+}
+
+func (h *LocalHub) Remote() bool { return false }
+
+func (h *LocalHub) GridCast(context.Context, string, string, string) error { return nil }
+
+func (h *LocalHub) CastsSince(context.Context, int, int) ([]Cast, error) { return nil, nil }
+
+func (h *LocalHub) LedgerStats(context.Context) ([]LedgerKind, error) { return nil, nil }
+
+func (h *LocalHub) PruneLedgerKinds(context.Context, []string) (PruneResult, error) {
+	return PruneResult{}, nil
 }

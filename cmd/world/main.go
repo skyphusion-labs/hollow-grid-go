@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SkyPhusion/hollow-grid-go/internal/grid"
 	"github.com/SkyPhusion/hollow-grid-go/internal/store"
 	"github.com/SkyPhusion/hollow-grid-go/internal/transport"
 	"github.com/SkyPhusion/hollow-grid-go/internal/world"
@@ -27,6 +28,8 @@ func main() {
 	url := flag.String("world-url", "", "this world's public URL (for the federation registry, e.g. wss://rustchoir.skyphusion.org/ws)")
 	data := flag.String("data", "data", "directory for local character persistence")
 	admins := flag.String("admins", "skyphusion", "comma-separated keeper names (wall command)")
+	gridHubURL := flag.String("grid-hub-url", "", "Grid Hub HTTP RPC URL (e.g. https://grid-hub.example/rpc); omit for standalone LocalHub")
+	gridHubToken := flag.String("grid-hub-token", "", "Bearer token for Grid Hub RPC (GRID_RPC_TOKEN)")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -44,7 +47,16 @@ func main() {
 			adminList = append(adminList, t)
 		}
 	}
-	srv := transport.NewServer(w, st, nil, adminList, log)
+	var gh grid.Hub
+	if strings.TrimSpace(*gridHubURL) != "" {
+		gh = grid.NewRemoteHub(*gridHubURL, *gridHubToken)
+		log.Info("federation enabled", "grid_hub", *gridHubURL)
+	}
+	srv := transport.NewServer(w, st, gh, adminList, log)
+
+	fedCtx, fedCancel := context.WithCancel(context.Background())
+	defer fedCancel()
+	srv.RunFederation(fedCtx)
 
 	httpSrv := &http.Server{
 		Addr:              *addr,
