@@ -7,7 +7,7 @@ image_path="skyphusion-labs/hollow-grid-go"
 image_repo="ghcr.io/${image_path}"
 
 if [ -z "${FLEET_DISPATCH_TOKEN:+SET}" ]; then
-  echo "::error::FLEET_DISPATCH_TOKEN is unset -- cannot dispatch fleet-chezmoi roll (org secret, visibility all)."
+  echo "::error::FLEET_DISPATCH_TOKEN is unset -- cannot dispatch fleet-chezmoi roll (org secret seeded from crew-secrets secrets-shared.env.age)."
   exit 1
 fi
 
