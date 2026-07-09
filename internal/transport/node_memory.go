@@ -29,3 +29,26 @@ func (s *Server) localTracesFor(node string, limit int) []grid.EchoTrace {
 	}
 	return append([]grid.EchoTrace(nil), rows[:limit]...)
 }
+
+// allLocalTraces returns recent node memory across every room (newest first).
+func (s *Server) allLocalTraces(limit int) []grid.EchoTrace {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]grid.EchoTrace, 0, limit)
+	for _, rows := range s.localTraces {
+		out = append(out, rows...)
+	}
+	if len(out) <= 1 {
+		return out
+	}
+	// Insertion sort by At desc (small n).
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j].At > out[j-1].At; j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}

@@ -1025,7 +1025,27 @@ func (s *session) recordTrace(node, kind, text string) {
 }
 
 func (s *session) cmdListen() {
-	if rand.Float64() < 0.4 {
+	tryEcho := func(feed []grid.Trace) bool {
+		if len(feed) == 0 {
+			return false
+		}
+		t := feed[rand.Intn(len(feed))]
+		s.event(event.GridTransmission, map[string]string{"kind": "echo", "text": t.Text})
+		s.line("You go still and tune the dead frequencies. The static thins, and the network plays something back -- a memory it never let go of:")
+		s.line("  >> " + t.Text + " <<")
+		if t.World != "" && t.World != s.w.Name {
+			s.line("  (...the signal carries from somewhere called " + t.World + ")")
+		}
+		return true
+	}
+	if local := s.srv.allLocalTraces(20); len(local) > 0 {
+		r := local[rand.Intn(len(local))]
+		s.event(event.GridTransmission, map[string]string{"kind": "echo", "text": r.Text})
+		s.line("You go still and tune the dead frequencies. The static thins, and the network plays something back -- a memory it never let go of:")
+		s.line("  >> " + r.Text + " <<")
+		return
+	}
+	if rand.Float64() < 0.6 {
 		var feed []grid.Trace
 		if lh, ok := s.srv.grid.(*grid.LocalHub); ok {
 			feed = lh.AllTraces(20)
@@ -1036,14 +1056,7 @@ func (s *session) cmdListen() {
 				feed = nil
 			}
 		}
-		if len(feed) > 0 {
-			t := feed[rand.Intn(len(feed))]
-			s.event(event.GridTransmission, map[string]string{"kind": "echo", "text": t.Text})
-			s.line("You go still and tune the dead frequencies. The static thins, and the network plays something back -- a memory it never let go of:")
-			s.line("  >> " + t.Text + " <<")
-			if t.World != "" && t.World != s.w.Name {
-				s.line("  (...the signal carries from somewhere called " + t.World + ")")
-			}
+		if tryEcho(feed) {
 			return
 		}
 	}
