@@ -50,6 +50,11 @@ For the full TS reference list (including verbs not yet ported), see
 | Command | Effect | Emits |
 |---|---|---|
 | `attack` / `kill` / `k` `<mob>` | start a fight; resolves over ticks | `combat.start`, `combat.round`…, `combat.end`; `char.vitals`; `char.died` on death |
+| `flee` / `f` | break off combat | `combat.end` (`result:"fled"`), `char.vitals` |
+
+If another player kills the mob you are fighting, you get `combat.end`
+(`result:"gone"`) and `inCombat: false` (stolen-kill sync). Mob deaths can roll
+loot onto the room ground (see `get`).
 
 ## Race ability
 
@@ -62,12 +67,14 @@ For the full TS reference list (including verbs not yet ported), see
 
 | Command | Effect | Emits |
 |---|---|---|
-| `get` / `take` `<item>` | pick up ground loot | `char.vitals` |
-| `drop` `<item>` | drop from inventory | (none) |
+| `get` / `take` `<item>` | pick up ground loot | refreshed on next `room.info` |
+| `drop` `<item>` | drop from inventory onto the room ground | (none) |
+| `use` / `drink` / `eat` `<item>` | consume (antidote / radcell / dust, …) | `char.vitals`, `char.affects` when state changes |
+| `examine` / `exa` `<item>` | read item desc (inventory or ground) | (none) |
 | `give <item> <player>` | hand gear to another player in the room | `char.vitals` (both sides when applicable) |
 | `list` / `wares` | tinker's stock (workshop) | (none) |
 | `buy <item>` | buy gear for gold | `char.vitals` |
-| `sell` / `trade` `<item>` | sell salvage at the market (honest coin; refused for Front members) | `char.vitals` |
+| `sell` / `trade` `<item>` | sell salvage at the market (item `value`; allies get ~20% bonus; refused for Front members) | `char.vitals` |
 | `steal` | steal from the market vendor (quick gold, corrupting) | `char.vitals`, `char.affects` |
 
 Bare `sell` prompts `Sell what?`; agents should send the item name.
@@ -76,11 +83,11 @@ Bare `sell` prompts `Sell what?`; agents should send the item name.
 
 | Command | Effect | Emits |
 |---|---|---|
-| `say <text>` | speak to the room | (none) |
+| `say` / `'` `<text>` | speak to the room | (none) |
 | `tell <player> <text>` | private message | `comm.tell` (recipient) |
 | `reply <text>` | reply to last tell | `comm.tell` |
 | `yell` / `shout` `<text>` | yell to the room (reliable broadcast) | `comm.yell` |
-| `emote` / `pose` `<action>` | emote to the room | (none) |
+| `emote` / `em` / `pose` `<action>` | emote to the room | (none) |
 | `gridcast` / `gc` `<text>` | cross-world chat (when hub is bound) | `grid.gridcast` |
 
 ## The moral arc (Cinder Front)
@@ -149,6 +156,9 @@ On hub failure the world keeps running locally.
 
 | Command | Effect |
 |---|---|
+| `hp` / `status` / `st` | HP / level / gold / standing flags (prose) |
+| `sit` | sit (`char.vitals` position) |
+| `home` | return to the Cracked Nexus (alias of the resume room) |
 | `help` / `h` / `?` | a short reminder |
 | `quit` / `q` | leave (the Grid keeps what you did) |
 

@@ -2,9 +2,14 @@
 
 Porting the Hollow Grid world framework to Go, against the upstream
 `docs/protocol.md`. The scoreboard is the upstream `smoke.mjs` (**135 checks**):
-**build the port to pass it, phase by phase.** Prod Rust Choir (hub + Dustfall
-live) baseline: **158 ok / 0 fail / 1 skip** (2026-07-09); the skip is the
-holding-pit warden grace wall-clock wait on slow boxes.
+**build the port to pass it, phase by phase.**
+
+**Status (2026-07-09 evening, handoff):** TS world **command parity is done** and
+live on Rust Choir (`main` @ `d6d0459`). Quiet prod smoke (mud-bots offline,
+`SMOKE_SLOW=2`): **156 ok / 1 fail / 0 skip**. The remaining fail is the
+holding-pit warden **grace-window** check (combat / respawn variance; same family
+as the historical 1-skip baseline on slow boxes). Under bot load, tell/reply and
+tide checks can flake; re-run quiet when diagnosing server regressions.
 
 ## Done
 
@@ -40,24 +45,26 @@ holding-pit warden grace wall-clock wait on slow boxes.
 - [x] **Grid Hub HTTP client** -- `internal/grid/RemoteHub`, `worlds`/`travel`, tide,
   ledger, gridcast, presence, rescued/fallen rolls (production: `GRID_HUB_URL`)
 
-## Next (polish / known gaps)
+## Shipped this session (rancid, 2026-07-09)
 
-- [x] **Session-local `resolved` moral state** -- join/defend no longer reappear in
-  `room.actions` after reconnect when faction is already set (derived from
-  `CharSheet.faction`).
+| PR | What |
+|---|---|
+| [#35](https://github.com/skyphusion-labs/hollow-grid-go/pull/35) | TS parity: ground loot, get/drop/use/examine, flee, stolen-kill vitals, poison, mob loot/XP, sell `value`, moral `room.actions` from faction, missing verbs/aliases |
+| [#36](https://github.com/skyphusion-labs/hollow-grid-go/pull/36) | Forgive recipient prose + `char.forgiven` use `PushReliable` (kapo smoke was dropping under heartbeat load) |
+
+Both merged + GHCR `latest` + `rust-choir-roll` to biafra. New transport files:
+`internal/transport/{combat,ground,items_cmds}.go` (+ `combat_parity_test.go`).
+
+## Next (optional / not blockers)
+
 - [ ] **NPCs + `talk` depth** in the tavern (dust-dealer / wench prose beyond
-  affordances); smoke green, content optional.
-- [x] **Stolen-kill vitals sync** -- TS v0.29.9 parity when another player kills
-  your mob mid-fight (`combat.end` + `inCombat: false` for the displaced fighter).
-
-## TS parity (2026-07-09)
-
-Full command-list parity with the reference world beyond smoke:
-
-- [x] Ground loot piles + `get`/`take`, `drop`, `use`/`drink`/`eat`, `examine`
-- [x] `flee`, `say`, `sit`, `status`/`hp`, `home`, `time`, verb aliases
-- [x] Mob loot tables, XP/level-up on kill, combat poison + poison ticks
-- [x] Sell prices from item `value` (ally bonus preserved)
+  affordances); smoke already green.
+- [ ] **Smoke client hardening** (upstream): Node can abort the suite on a late
+  WebSocket `ErrorEvent` after `RD.sock.close()` even when assertions passed;
+  wrap or harden `mkClient` open/error handlers in `the-hollow-grid/smoke.mjs`
+  if prod smoke runs keep dying mid-suite under tunnel jitter.
+- [ ] **Warden grace flake** -- tighten or SKIP the post-respawn `free` check more
+  cleanly when combat variance wins (upstream smoke concern).
 
 ## Deferred -- hub-side / trust (upstream)
 

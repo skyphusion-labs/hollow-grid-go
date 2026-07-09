@@ -50,8 +50,8 @@ for {
 }
 ```
 
-Because every mutation of `session`/`Player` state happens inside this one loop —
-commands and ticks are serialized by the `select` — **no mutexes are needed.** A
+Because every mutation of `session`/`Player` state happens inside this one loop --
+commands and ticks are serialized by the `select` -- **no mutexes are needed.** A
 combat fight is just the heartbeat finding `player.Target != nil` and resolving a
 round; `rest` is the heartbeat finding `position == "resting"` and regenerating.
 The reader goroutine only reads and forwards on a channel; a `stop` channel and
@@ -79,7 +79,7 @@ The most important property: moral choices are first-class, labelled actions, no
 prose to be parsed. `room.actions` carries each contextual action with a `kind`
 (`move`/`moral`/…) and, for moral ones, a `valence` (`virtuous`/`corrupt`/
 `grave`). A *hunted* race who is offered `join` at the Cinder Front recruiter sees
-that action flagged `valence:"grave"` — the gravest betrayal — computed per-player
+that action flagged `valence:"grave"` -- the gravest betrayal -- computed per-player
 from race stance. An agent reads the ethics; it does not infer them.
 
 ## The world model (`internal/world`)
@@ -89,15 +89,18 @@ from race stance. An agent reads the ethics; it does not infer them.
   (moral choices), live `Mobs`, and a `Captive`.
 - **Races** (`races.go`) are opaque federated labels with light mechanical leans
   (hp/damage/armor/regen) and a Cinder Front **stance** (`accepted`/`tolerated`/
-  `hunted`) — the stance is the heart of the moral system: where you stand before
+  `hunted`) -- the stance is the heart of the moral system: where you stand before
   you have done anything.
-- **Mobs** (`mobs.go`) are template + current HP instances spawned into rooms.
-- **Items** (`items.go`) carry slots and combat leans; the player has an
-  inventory and equipment map.
+- **Mobs** (`mobs.go`) are template + current HP instances spawned into rooms,
+  with loot tables, XP awards, and optional poison chance.
+- **Items** (`items.go`) carry slots, combat leans, sell `value`, and optional
+  `use` effects; the player has an inventory and equipment map. Ground piles are
+  world-local on the transport `Server` (`ground.go`) and appear in `room.info.items`.
 - **The living world** is a *pure function of elapsed time*: `World.State()`
   computes `tick`/`phase`/`weather` from how long the world has been up, so every
   observer agrees and there is no shared clock to race. The heartbeat just emits
-  it, so the tick advances on its own.
+  it, so the tick advances on its own. Combat (including stolen-kill displacement),
+  regen, and poison ticks share that heartbeat.
 
 ## Persistence and the federation seam (`internal/store`)
 
@@ -111,14 +114,14 @@ type CharStore interface {
 ```
 
 - `FileStore` (today) persists the canonical `CharSheet` as one JSON file per
-  character — dependency-free, human-inspectable, the documented offline fallback.
+  character -- dependency-free, human-inspectable, the documented offline fallback.
 - The federation client (later) implements the *same interface* against the Grid
   (`loadCharacter`/`commitCharacter`). Per the trust model, only the canonical
   `CharSheet` (level/xp/gold/faction/morality/title/race/ashsworn) ever
   round-trips; inventory, HP, room, and position are world-local and never shared.
 
 Identity is name-based (protocol.md s1): a known name resumes its sheet and skips
-the race menu; a new name chooses a race once. Persistence is best-effort —
+the race menu; a new name chooses a race once. Persistence is best-effort --
 a store failure is logged but never blocks play.
 
 ## Federation (`internal/grid`)
