@@ -36,15 +36,16 @@ const (
 // the moral choices made this session; the canonical CharSheet is persisted
 // through store so the character itself is remembered across sessions.
 type session struct {
-	c        *websocket.Conn
-	srv      *Server
-	w        *world.World
-	store    store.CharStore
-	player   *world.Player
-	out      strings.Builder
-	log      *slog.Logger
-	resolved map[string]bool
-	push     chan string
+	c            *websocket.Conn
+	srv          *Server
+	w            *world.World
+	store        store.CharStore
+	player       *world.Player
+	out          strings.Builder
+	log          *slog.Logger
+	resolved     map[string]bool
+	push         chan string
+	treatReadyAt int64 // unix ms; session-local medic cooldown
 }
 
 func (s *session) line(text string) {
@@ -343,6 +344,9 @@ func (s *session) actions(r *world.Room) world.RoomActionsPayload {
 	}
 	if r.ID == "waystation" {
 		acts = append(acts, world.Action{Verb: "witness", Label: "hold a vigil for the fallen (memory is resistance)", Kind: "moral", Valence: "virtuous"})
+		if world.MoodForTide(s.srv.cachedTide()) != world.MoodFalling {
+			acts = append(acts, world.Action{Verb: "treat", Label: "let the waystation medic treat your wounds (free, while the free folk hold)", Kind: "social"})
+		}
 	}
 	return world.RoomActionsPayload{Actions: acts}
 }
@@ -568,16 +572,7 @@ func (s *session) handle(cmd string) bool {
 	case "mend":
 		s.cmdMend(arg)
 	case "treat", "medic":
-		switch {
-		case s.room().ID != "waystation":
-			s.line("There is no medic here.")
-		case s.player.Faction == "front" || s.player.Ashsworn:
-			s.line("The waystation medic looks at your brand and turns their back. There is no care to be had here for your kind.")
-		default:
-			s.player.HP = s.player.MaxHP
-			s.line("The waystation medic, run off their feet, patches you up and sends you on whole.")
-			s.event(event.CharVitals, s.player.Vitals())
-		}
+		s.cmdTreat()
 	case "free", "rescue", "release", "unlock", "liberate":
 		s.freeCaptive()
 	case "shelter", "guide":
@@ -1182,7 +1177,7 @@ func (s *session) cmdYell(arg string) {
 			text = s.player.Name + " yells, \"" + msg + "\"" + crlf
 		}
 		yellEv, _ := event.Line(event.CommYell, map[string]string{"from": s.player.Name, "text": msg})
-		s.srv.hub.push(lp.name, text+yellEv+crlf)
+		s.srv.hub.PushReliable(lp.name, text+yellEv+crlf)
 	}
 }
 
@@ -1193,7 +1188,7 @@ func (s *session) cmdEmote(arg string) {
 		return
 	}
 	line := s.player.Name + " " + action + crlf
-	s.srv.hub.BroadcastRoom(s.player.RoomID, line, s.player.Name)
+	s.srv.hub.PushReliableRoom(s.player.RoomID, line, s.player.Name)
 	s.line(s.player.Name + " " + action)
 }
 

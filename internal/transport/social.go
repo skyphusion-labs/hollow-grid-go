@@ -1,8 +1,11 @@
 package transport
 
 import (
+	"context"
+	"fmt"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/SkyPhusion/hollow-grid-go/internal/event"
@@ -253,15 +256,10 @@ func (s *session) cmdWall(arg string) {
 		return
 	}
 	banner := "*** GRID BROADCAST ***  " + msg
+	ev, _ := event.Line(event.ServerAnnounce, map[string]string{"from": s.player.Name, "text": msg})
 	for _, lp := range s.srv.hub.All() {
-		var text string
-		if lp.name == s.player.Name {
-			text = banner + crlf
-		} else {
-			text = banner + crlf
-		}
-		ev, _ := event.Line(event.ServerAnnounce, map[string]string{"from": s.player.Name, "text": msg})
-		s.srv.hub.push(lp.name, text+ev+crlf)
+		text := banner + crlf
+		s.srv.hub.PushReliable(lp.name, text+ev+crlf)
 	}
 }
 
@@ -364,8 +362,59 @@ func (s *session) cmdGive(arg string) {
 	}
 	s.player.RemoveFromInventory(id)
 	lp.plr.AddItem(id)
+	s.persist()
+	s.srv.persistPlayer(lp.plr)
 	s.line("You give " + world.ItemName(id) + " to " + lp.name + ".")
-	s.srv.hub.push(lp.name, s.player.Name+" gives you "+world.ItemName(id)+".\r\n")
+	s.srv.hub.PushReliable(lp.name, s.player.Name+" gives you "+world.ItemName(id)+".\r\n")
+}
+
+func (s *session) cmdTreat() {
+	if s.room().ID != "waystation" {
+		s.line("There's no medic here. The free folk keep their triage cot at the waystation, off the Scorch Road.")
+		return
+	}
+	if s.player.Target != nil {
+		s.line("Not in the middle of a fight.")
+		return
+	}
+	if s.player.Faction == "front" || s.player.Ashsworn {
+		s.line("The waystation medic looks at your brand and turns their back. There is no care to be had here for your kind.")
+		return
+	}
+	tide, _ := s.srv.tide(context.Background())
+	mood := world.MoodForTide(tide)
+	if mood == world.MoodFalling {
+		s.line("The triage cot is empty, the tarp flapping. With the Front ascendant, the medic has gone to ground -- or worse. There's no care to be had here today. Turn the tide, and they'll come back.")
+		s.event(event.CharTreated, map[string]any{"amount": 0, "mood": mood, "tide": tide})
+		return
+	}
+	if s.player.HP >= s.player.MaxHP {
+		s.line(`The medic looks you over and waves you off. "You're whole. Save the cot for someone who isn't."`)
+		return
+	}
+	now := time.Now().UnixMilli()
+	if s.treatReadyAt > 0 && now < s.treatReadyAt {
+		secs := (s.treatReadyAt - now + 999) / 1000
+		s.line(fmt.Sprintf(`The medic shakes their head. "I've done what I can for you for now. Others are waiting." (%ds)`, secs))
+		return
+	}
+	before := s.player.HP
+	switch mood {
+	case world.MoodRising:
+		s.player.HP = s.player.MaxHP
+		s.line("The medic waves you onto the cot. With the free folk holding, the waystation has supplies to spare -- they clean and bind your wounds without a word about payment. You stand whole again.")
+	default:
+		s.player.HP += 12
+		if s.player.HP > s.player.MaxHP {
+			s.player.HP = s.player.MaxHP
+		}
+		s.line("The medic is run off their feet, but waves you over and does what they can with what little there is. It's not everything, but it's something -- and it's freely given.")
+	}
+	s.treatReadyAt = now + 45_000
+	s.persist()
+	s.srv.hub.Sync(s.player)
+	s.event(event.CharTreated, map[string]any{"amount": s.player.HP - before, "mood": mood, "tide": tide})
+	s.event(event.CharVitals, s.player.Vitals())
 }
 
 func (s *session) cmdMend(arg string) {

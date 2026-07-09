@@ -37,6 +37,7 @@ type Server struct {
 	kept        map[keptPair]bool
 	deadMobs    map[string]pendingRespawn // template id -> respawn schedule
 	mobSlainAt  map[string]int64          // template id -> unix ms when last slain
+	lastTide    int                       // cached collective tide from the hub
 	lastCast    int
 	mu          sync.Mutex
 }
@@ -69,6 +70,28 @@ func NewServer(w *world.World, st store.CharStore, gh grid.Hub, admins []string,
 
 func (s *Server) isAdmin(name string) bool {
 	return s.admins[strings.ToLower(name)]
+}
+
+// tide reads the collective war tide, caching the last good value when the hub
+// is reachable (mirrors upstream lastTide on the world DO).
+func (s *Server) tide(ctx context.Context) (int, error) {
+	t, err := s.grid.Tide(ctx)
+	if err == nil {
+		s.mu.Lock()
+		s.lastTide = t
+		s.mu.Unlock()
+		return t, nil
+	}
+	s.mu.Lock()
+	cached := s.lastTide
+	s.mu.Unlock()
+	return cached, nil
+}
+
+func (s *Server) cachedTide() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastTide
 }
 
 func (s *Server) cacheGold(room string) int {
