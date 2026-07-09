@@ -3,6 +3,7 @@ package transport
 import (
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/SkyPhusion/hollow-grid-go/internal/world"
 )
@@ -36,7 +37,7 @@ func NewHub() *Hub {
 
 // Register adds a player and returns their outbound push channel.
 func (h *Hub) Register(p *world.Player) chan string {
-	ch := make(chan string, 64)
+	ch := make(chan string, 256)
 	lp := &livePlayer{
 		name: p.Name, room: p.RoomID, title: p.Title,
 		faction: p.Faction, race: p.Race, ashsworn: p.Ashsworn, morality: p.Morality,
@@ -160,13 +161,44 @@ func (h *Hub) push(name, text string) {
 	if !ok {
 		return
 	}
-	deliver(lp, text)
+	pushBestEffort(lp, text)
 }
 
-// deliver enqueues outbound text for a live player. Blocks until the session
-// reads it so tell/reply and gridcasts are never dropped on a full buffer.
-func deliver(lp *livePlayer, text string) {
-	lp.push <- text
+// PushReliable retries until the session reads the message or times out.
+// Used for tell/reply so private comms are not dropped on a full buffer.
+func (h *Hub) PushReliable(name, text string) {
+	h.mu.RLock()
+	lp, ok := h.players[name]
+	h.mu.RUnlock()
+	if !ok {
+		return
+	}
+	pushReliable(lp, text)
+}
+
+// pushReliable retries a direct push until the session reads it or times out.
+// Used for tell/reply so comms are not dropped when the buffer is momentarily full.
+func pushReliable(lp *livePlayer, text string) {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		select {
+		case lp.push <- text:
+			return
+		default:
+			if time.Now().After(deadline) {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+// pushBestEffort enqueues text without blocking the caller (drops if full).
+func pushBestEffort(lp *livePlayer, text string) {
+	select {
+	case lp.push <- text:
+	default:
+	}
 }
 
 // BroadcastRoom sends prose to everyone in a room except skip (if non-empty).
@@ -180,7 +212,7 @@ func (h *Hub) BroadcastRoom(room, text, skip string) {
 	}
 	h.mu.RUnlock()
 	for _, lp := range targets {
-		deliver(lp, text)
+		pushBestEffort(lp, text)
 	}
 }
 
@@ -193,7 +225,7 @@ func (h *Hub) BroadcastAll(text string) {
 	}
 	h.mu.RUnlock()
 	for _, lp := range targets {
-		deliver(lp, text)
+		pushBestEffort(lp, text)
 	}
 }
 
@@ -208,6 +240,6 @@ func (h *Hub) BroadcastAllExcept(text, skip string) {
 	}
 	h.mu.RUnlock()
 	for _, lp := range targets {
-		deliver(lp, text)
+		pushBestEffort(lp, text)
 	}
 }
