@@ -149,15 +149,28 @@ func (s *session) cmdSell(arg string) {
 		s.line("You aren't carrying \"" + arg + "\".")
 		return
 	}
-	s.player.RemoveFromInventory(id)
-	value := 5
-	if s.player.Faction == "ally" {
-		value = 6
+	it, has := world.ItemByID(id)
+	base := 0
+	if has {
+		base = it.Value
 	}
+	if base <= 0 {
+		s.line("The vendor drone won't touch " + world.ItemName(id) + ".")
+		return
+	}
+	value := base
+	if s.player.Faction == "ally" {
+		value = (base * 12) / 10
+	}
+	s.player.RemoveFromInventory(id)
 	s.player.Gold += value
 	s.persist()
 	s.srv.hub.Sync(s.player)
-	s.line("You sell " + world.ItemName(id) + " for " + itoa(value) + " gold.")
+	bonus := ""
+	if value > base {
+		bonus = " (the elves see you right)"
+	}
+	s.line("You sell " + world.ItemName(id) + " for " + itoa(value) + " gold." + bonus)
 	s.event(event.CharVitals, s.player.Vitals())
 }
 

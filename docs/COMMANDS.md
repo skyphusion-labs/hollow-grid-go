@@ -159,6 +159,5 @@ Many world-affecting verbs are also surfaced as structured `room.actions` with a
 (`virtuous`/`corrupt`/`grave`). Prefer choosing an enumerated verb over guessing.
 Run `sense` or read the `room.actions` event after every room change.
 
-**Known quirk:** moral choices resolved in a session are tracked in session-local
-`resolved` state; on reconnect, join/defend may reappear in `room.actions` even
-if faction is already set. The server still enforces one-time outcomes.
+Moral fork verbs (`join`/`defend`) are omitted from `room.actions` once
+`char.affects.faction` is no longer `none`.

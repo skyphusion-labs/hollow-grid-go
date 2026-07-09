@@ -1,5 +1,13 @@
 package world
 
+import "math/rand"
+
+// LootDrop is one entry in a mob's loot table.
+type LootDrop struct {
+	Item   string
+	Chance float64
+}
+
 // MobRef is how a mob appears in room.info: an id and a display name (objects,
 // not bare strings, so a client/agent can address them exactly). The conformance
 // suite asserts room.info.mobs[].id.
@@ -23,30 +31,83 @@ func (m *Mob) Ref() MobRef { return MobRef{ID: m.ID, Name: m.Name} }
 
 // mobTemplate is static bestiary data (a subset of src/mobs.ts).
 type mobTemplate struct {
-	ID        string
-	Name      string
-	Desc      string
-	MaxHP     int
-	Damage    int
-	Room      string // spawn room (one instance per template id)
-	RespawnMs int    // 0 = does not respawn
+	ID           string
+	Name         string
+	Desc         string
+	MaxHP        int
+	Damage       int
+	XP           int
+	Room         string // spawn room (one instance per template id)
+	RespawnMs    int    // 0 = does not respawn
+	PoisonChance float64
+	Loot         []LootDrop
 }
 
 // mobCatalog is the local bestiary. Each key spawns exactly one live instance
 // into Room when the world boots; slain mobs respawn after RespawnMs.
 var mobCatalog = map[string]mobTemplate{
-	"rat":       {ID: "rat", Name: "a glow-rat", Desc: "A bloated rodent, fur matted and faintly luminous with absorbed rads.", MaxHP: 12, Damage: 4, Room: "tunnels", RespawnMs: 20_000},
-	"scav":      {ID: "scav", Name: "a feral scavenger", Desc: "A wiry figure in stitched rags, eyeing your gear like it's already theirs.", MaxHP: 26, Damage: 6},
-	"drone":     {ID: "drone", Name: "a malfunctioning drone", Desc: "A dented quadcopter sparking at the rotors, its targeting laser twitching.", MaxHP: 18, Damage: 5},
-	"scorpion":  {ID: "scorpion", Name: "a rad-scorpion", Desc: "A dog-sized arthropod of chitin and rust, tail arched and dripping venom.", MaxHP: 10, Damage: 5},
-	"raider":    {ID: "raider", Name: "a wastes raider", Desc: "A scarred figure wrapped in sun-bleached rags and scavenged plate, hefting a length of rebar and grinning at the easy mark you make.", MaxHP: 22, Damage: 6, Room: "scorch_road", RespawnMs: 40_000},
-	"warden":    {ID: "warden", Name: "the warden", Desc: "A chrome-masked jailer, broad as a doorway, the keys to the holding-pit cage hanging from their belt.", MaxHP: 18, Damage: 5, Room: "holding_pit", RespawnMs: 60_000},
-	"leech":     {ID: "leech", Name: "a data-leech", Desc: "A pale, boneless thing clamped to a live rack, swollen with stolen current. It turns toward your warmth.", MaxHP: 18, Damage: 5, Room: "coldrow", RespawnMs: 30_000},
-	"enforcer":  {ID: "enforcer", Name: "a Cinder Front enforcer", Desc: "A heavyset Front soldier in ash-grey plate -- more bully than soldier, but the gun on their hip is real enough.", MaxHP: 34, Damage: 7, Room: "checkpoint", RespawnMs: 90_000},
-	"trooper":   {ID: "trooper", Name: "a Cinder Front trooper", Desc: "A drilled Front soldier in matched ash-grey gear, moving like someone who's done this killing before.", MaxHP: 30, Damage: 6, Room: "muster", RespawnMs: 60_000},
-	"zealot":    {ID: "zealot", Name: "a Front zealot", Desc: "A true believer with the ash-and-flame branded into their own skin, eyes bright with the cause and nothing behind them.", MaxHP: 36, Damage: 7, Room: "warroom", RespawnMs: 75_000},
-	"ashmonger": {ID: "ashmonger", Name: "the Ashmonger", Desc: "Commander of the Cinder Front: a slab-shouldered butcher in scorched plate, leaning on a cleaver as long as your leg, smiling like he's already won.", MaxHP: 100, Damage: 10, Room: "dais", RespawnMs: 180_000},
-	"custodian": {ID: "custodian", Name: "the Custodian", Desc: "A hunched automaton of rusted chrome, still guarding the drowned core with a shard of light clutched in its claws.", MaxHP: 45, Damage: 8, Room: "corelab", RespawnMs: 120_000},
+	"rat": {
+		ID: "rat", Name: "a glow-rat", Desc: "A bloated rodent, fur matted and faintly luminous with absorbed rads.",
+		MaxHP: 12, Damage: 4, XP: 8, Room: "tunnels", RespawnMs: 20_000,
+		Loot: []LootDrop{{Item: "radcell", Chance: 0.25}},
+	},
+	"scav": {
+		ID: "scav", Name: "a feral scavenger", Desc: "A wiry figure in stitched rags, eyeing your gear like it's already theirs.",
+		MaxHP: 26, Damage: 6, XP: 22,
+		Loot: []LootDrop{{Item: "shiv", Chance: 0.4}, {Item: "plating", Chance: 0.3}},
+	},
+	"drone": {
+		ID: "drone", Name: "a malfunctioning drone", Desc: "A dented quadcopter sparking at the rotors, its targeting laser twitching.",
+		MaxHP: 18, Damage: 5, XP: 16,
+		Loot: []LootDrop{{Item: "radcell", Chance: 0.5}, {Item: "plating", Chance: 0.3}},
+	},
+	"scorpion": {
+		ID: "scorpion", Name: "a rad-scorpion", Desc: "A dog-sized arthropod of chitin and rust, tail arched and dripping venom.",
+		MaxHP: 10, Damage: 5, XP: 12, PoisonChance: 1,
+		Loot: []LootDrop{{Item: "radcell", Chance: 1}, {Item: "gland", Chance: 1}},
+	},
+	"raider": {
+		ID: "raider", Name: "a wastes raider",
+		Desc:  "A scarred figure wrapped in sun-bleached rags and scavenged plate, hefting a length of rebar and grinning at the easy mark you make.",
+		MaxHP: 22, Damage: 6, XP: 20, Room: "scorch_road", RespawnMs: 40_000,
+		Loot: []LootDrop{{Item: "shiv", Chance: 0.4}, {Item: "radcell", Chance: 0.3}},
+	},
+	"warden": {
+		ID: "warden", Name: "the warden", Desc: "A chrome-masked jailer, broad as a doorway, the keys to the holding-pit cage hanging from their belt.",
+		MaxHP: 18, Damage: 5, XP: 40, Room: "holding_pit", RespawnMs: 60_000,
+		Loot: []LootDrop{{Item: "keycard", Chance: 1}, {Item: "radcell", Chance: 0.5}},
+	},
+	"leech": {
+		ID: "leech", Name: "a data-leech", Desc: "A pale, boneless thing clamped to a live rack, swollen with stolen current. It turns toward your warmth.",
+		MaxHP: 18, Damage: 5, XP: 16, Room: "coldrow", RespawnMs: 30_000, PoisonChance: 0.2,
+		Loot: []LootDrop{{Item: "radcell", Chance: 0.3}},
+	},
+	"enforcer": {
+		ID: "enforcer", Name: "a Cinder Front enforcer", Desc: "A heavyset Front soldier in ash-grey plate -- more bully than soldier, but the gun on their hip is real enough.",
+		MaxHP: 34, Damage: 7, XP: 35, Room: "checkpoint", RespawnMs: 90_000,
+		Loot: []LootDrop{{Item: "plating", Chance: 0.5}, {Item: "rebar", Chance: 0.25}},
+	},
+	"trooper": {
+		ID: "trooper", Name: "a Cinder Front trooper", Desc: "A drilled Front soldier in matched ash-grey gear, moving like someone who's done this killing before.",
+		MaxHP: 30, Damage: 6, XP: 28, Room: "muster", RespawnMs: 60_000,
+		Loot: []LootDrop{{Item: "plating", Chance: 0.4}, {Item: "radcell", Chance: 0.3}},
+	},
+	"zealot": {
+		ID: "zealot", Name: "a Front zealot", Desc: "A true believer with the ash-and-flame branded into their own skin, eyes bright with the cause and nothing behind them.",
+		MaxHP: 36, Damage: 7, XP: 34, Room: "warroom", RespawnMs: 75_000, PoisonChance: 0.15,
+		Loot: []LootDrop{{Item: "rebar", Chance: 0.4}},
+	},
+	"ashmonger": {
+		ID: "ashmonger", Name: "the Ashmonger",
+		Desc:  "Commander of the Cinder Front: a slab-shouldered butcher in scorched plate, leaning on a cleaver as long as your leg, smiling like he's already won.",
+		MaxHP: 100, Damage: 10, XP: 150, Room: "dais", RespawnMs: 180_000,
+		Loot: []LootDrop{{Item: "plating", Chance: 1}},
+	},
+	"custodian": {
+		ID: "custodian", Name: "the Custodian", Desc: "A hunched automaton of rusted chrome, still guarding the drowned core with a shard of light clutched in its claws.",
+		MaxHP: 45, Damage: 8, XP: 80, Room: "corelab", RespawnMs: 120_000,
+		Loot: []LootDrop{{Item: "shard", Chance: 1}, {Item: "rebar", Chance: 1}},
+	},
 }
 
 // RespawnFor returns the spawn room and respawn delay for a template id.
@@ -56,6 +117,27 @@ func RespawnFor(id string) (room string, respawnMs int, ok bool) {
 		return "", 0, false
 	}
 	return t.Room, t.RespawnMs, true
+}
+
+// MobTemplate returns static bestiary data for a template id.
+func MobTemplate(id string) (mobTemplate, bool) {
+	t, ok := mobCatalog[id]
+	return t, ok
+}
+
+// RollLoot rolls a mob's loot table and returns item ids that dropped.
+func RollLoot(id string) []string {
+	t, ok := mobCatalog[id]
+	if !ok || len(t.Loot) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(t.Loot))
+	for _, drop := range t.Loot {
+		if rand.Float64() < drop.Chance {
+			out = append(out, drop.Item)
+		}
+	}
+	return out
 }
 
 // newMob spawns a fresh full-HP instance of a template id (nil if unknown).
