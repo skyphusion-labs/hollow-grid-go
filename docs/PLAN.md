@@ -28,7 +28,7 @@ multiplayer (deferred -- see the end). Updated 2026-07-08: **81 / 134** on branc
 - [x] the **holding-pit rescue** — beat the warden, `free` the captive → `grid.rescued` (named, +morality, unfarmable)
 - [x] **dreams** — `sleep` → `char.dream`, a mirror of your record
 - [x] **persistence** — the canonical `CharSheet` via `CharStore`/`FileStore`; resume on a known name
-- [x] **Docker** (multi-stage → distroless) + **CI** (GitHub Actions: `go vet` + build, unit tests + the upstream conformance suite; image build + deploy still to be wired)
+- [x] **Docker** (multi-stage -> distroless) + **CI** (GitHub Actions: `go vet` + build, unit tests + the upstream conformance suite; GHCR push + auto-roll to biafra on `main` via `fleet-chezmoi` `rust-choir-roll`)
 
 ## Next (world-local)
 

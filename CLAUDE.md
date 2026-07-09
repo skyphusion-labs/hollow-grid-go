@@ -117,11 +117,13 @@ Dockerfile          multi-stage build -> distroless
 - Go, standard library first; one runtime dep (`coder/websocket`). Justify any new dependency.
 - Output is plain UTF-8 with CRLF lines for clean rendering in line-based clients; an undeclared
   exit/command returns a clear message (no silent no-op -- that was the bug that motivated the project).
-- **CI runners:** PRIVATE repo, so CI runs on the org self-hosted fleet pool (`runs-on: [self-hosted,
-  fleet]`), not GitHub-hosted. `release.yml` builds + pushes to GHCR (`:<sha>` + `:latest`) on push to
-  `main`; the smoke conformance run is informational / non-blocking while the port is in progress (a
-  partial pass never reds the build). Deploy (pull + restart on the host) is a separate deliberate step
- .
+- **CI runners:** PUBLIC repo -> GitHub-hosted `ubuntu-latest` for `ci.yml` and `release.yml`
+  (fork-safe). `release.yml` builds + pushes to GHCR (`:<sha>` + `:latest`) on push to `main`;
+  the smoke conformance run is informational / non-blocking while the port is in progress (a
+  partial pass never reds the build). After a green GHCR push, dispatches `fleet-chezmoi`
+  `rust-choir-roll` to pull + redeploy Rust Choir on biafra (org secrets
+  `FLEET_DISPATCH_TOKEN` + `GHCR_READ_PAT`; see `crew-secrets` README and
+  `fleet-chezmoi/system/swarm/RUNBOOK-rust-choir-roll.md`).
 
 ## Crew + identity
 
