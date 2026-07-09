@@ -21,13 +21,14 @@ const Starter = "shiv"
 
 // Items is the local item table (a growing subset of src/items.ts).
 var Items = map[string]Item{
-	"shiv":    {ID: "shiv", Name: "a rusted shiv", Slot: "weapon", Damage: 3},
-	"rebar":   {ID: "rebar", Name: "a length of rebar", Slot: "weapon", Damage: 6},
-	"helm":    {ID: "helm", Name: "a dented scrap helm", Slot: "head", Armor: 1},
-	"plating": {ID: "plating", Name: "a sheet of scrap plating", Slot: "body", Armor: 2},
-	"charm":   {ID: "charm", Name: "an elven charm", Slot: ""},
-	"dust":    {ID: "dust", Name: "a packet of dust", Slot: ""},
-	"shard":   {ID: "shard", Name: "the core shard", Slot: ""},
+	"shiv":     {ID: "shiv", Name: "a rusted shiv", Slot: "weapon", Damage: 3},
+	"rebar":    {ID: "rebar", Name: "a length of rebar", Slot: "weapon", Damage: 6},
+	"helm":     {ID: "helm", Name: "a dented scrap helm", Slot: "head", Armor: 1},
+	"plating":  {ID: "plating", Name: "a sheet of scrap plating", Slot: "body", Armor: 2},
+	"charm":    {ID: "charm", Name: "an elven charm", Slot: ""},
+	"antidote": {ID: "antidote", Name: "an antidote vial", Slot: ""},
+	"dust":     {ID: "dust", Name: "a packet of dust", Slot: ""},
+	"shard":    {ID: "shard", Name: "the core shard", Slot: ""},
 }
 
 // ItemByID returns the item definition for an id.
@@ -137,6 +138,16 @@ func (p *Player) Unwear(arg string) (Item, bool) {
 	p.Inventory = append(p.Inventory, id)
 	it, _ := ItemByID(id)
 	return it, true
+}
+
+// HasItem reports whether the pack holds at least one copy of id.
+func (p *Player) HasItem(id string) bool {
+	for _, have := range p.Inventory {
+		if have == id {
+			return true
+		}
+	}
+	return false
 }
 
 // AddItem puts one copy of id into the pack.

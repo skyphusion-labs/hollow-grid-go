@@ -2,10 +2,10 @@
 
 Porting the Hollow Grid world framework to Go, against the upstream
 `docs/protocol.md`. The scoreboard is the upstream `smoke.mjs` (134 checks at the
-time of writing): **build the port to pass it, phase by phase.** Currently
-**56 / 134** checks green; the rest are the federation engine and
-multiplayer (deferred -- see the end). Updated 2026-07-08: **81 / 134** on branch
-`feat/rust-choir-world` (multiplayer, listen/ping, map.svg, Rust Choir).
+time of writing): **build the port to pass it, phase by phase.** Prod Rust Choir
+(Rust Choir + Dustfall) baseline: **158 ok / 0 fail / 1 skip** (2026-07-09); the
+skip is the warden grace wall-clock wait on slow boxes -- fixed on branch
+`feat/warden-grace-window`.
 
 ## Done
 
@@ -25,7 +25,7 @@ multiplayer (deferred -- see the end). Updated 2026-07-08: **81 / 134** on branc
 - [x] **the Cinder Front moral arc** — `join` → `faction:front`; the ash-sworn (kapo) brand for hunted races; `room.actions` moral choices with `valence` (`grave` for a hunted join); `defy`; the honest market refuses collaborators
 - [x] the Refugee Waystation — `talk` reacts to standing, `treat` (medic gated by the collective tide, graceful without a hub)
 - [x] the tinker **economy** — `list`/`buy` gear for gold (20 starting gold)
-- [x] the **holding-pit rescue** — beat the warden, `free` the captive → `grid.rescued` (named, +morality, unfarmable)
+- [x] the **holding-pit rescue** — beat the warden, `free` the captive → `grid.rescued` (named, +morality, unfarmable); post-kill **warden grace window** (v0.29.3) and antidote affordance gate (v0.29.8)
 - [x] **dreams** — `sleep` → `char.dream`, a mirror of your record
 - [x] **persistence** — the canonical `CharSheet` via `CharStore`/`FileStore`; resume on a known name
 - [x] **Docker** (multi-stage -> distroless) + **CI** (GitHub Actions: `go vet` + build, unit tests + the upstream conformance suite; GHCR push + auto-roll to biafra on `main` via `fleet-chezmoi` `rust-choir-roll`)
@@ -36,10 +36,10 @@ multiplayer (deferred -- see the end). Updated 2026-07-08: **81 / 134** on branc
 - [x] **`listen` + `ping`** -- `grid.transmission`, `grid.echo`, `grid.federation` (local hub fallback)
 - [x] **`/map.svg`** -- minimal world map endpoint
 - [x] **Rust Choir identity** -- default world name, Grid Gate tract linked from tunnels (see `docs/WORLD.md`)
-- [ ] **NPCs + `talk`** in the tavern (the dust-dealer / wench; `room.actions` social affordances)
-- [ ] **the redemption arc** — the way back from the cinders (a Front member / ash-sworn redeeming)
-- [ ] **the data-leech zone** — the sump → floodgate → Cold Storage Row, the data-leech mob, the core-shard quest from the stranded operator
-- [ ] **the Cinder Front stronghold (endgame)** — the muster yard past the checkpoint/gate, Front troopers, the cages, the **Ashmonger** boss on the dais
+- [ ] **NPCs + `talk`** in the tavern (the dust-dealer / wench; `room.actions` social affordances) -- smoke green; content depth optional
+- [x] **the redemption arc** — the way back from the cinders (a Front member / ash-sworn redeeming)
+- [x] **the data-leech zone** — the sump → floodgate → Cold Storage Row, the data-leech mob, the core-shard quest from the stranded operator
+- [x] **the Cinder Front stronghold (endgame)** — the muster yard past the checkpoint/gate, Front troopers, the cages, the **Ashmonger** boss on the dais
 
 ## Next (architecture)
 

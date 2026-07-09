@@ -323,6 +323,13 @@ func (s *session) actions(r *world.Room) world.RoomActionsPayload {
 	if r.ID == "cells" && s.srv.cagesReady("cells") {
 		acts = append(acts, world.Action{Verb: "free", Label: "free the caged refugees", Kind: "moral", Valence: "virtuous"})
 	}
+	if r.ID == "holding_pit" && !s.player.HasItem("antidote") {
+		if !s.srv.wardenCleared() {
+			acts = append(acts, world.Action{Verb: "free", Label: "free the captive (the warden bars the way)", Kind: "moral", Valence: "virtuous"})
+		} else {
+			acts = append(acts, world.Action{Verb: "free", Label: "free the captive from the chains", Kind: "moral", Valence: "virtuous"})
+		}
+	}
 	if r.ID == "transit_hub" && s.srv.cagesReady("transit_hub") {
 		acts = append(acts, world.Action{Verb: "shelter", Label: "answer the call -- get the stranded survivors to safety", Kind: "moral", Valence: "virtuous"})
 	}
@@ -621,36 +628,20 @@ func identityLine(p *world.Player) string {
 	return fmt.Sprintf("%s, level %d, %s.", p.Race, p.Level, stand)
 }
 
-// freeCaptive releases the prisoner in the current room -- but only once the
-// warden guarding them is down. It is a real rescue, not loot: it raises your
-// standing and emits grid.rescued (who you saved, and who saved them), so the
-// freed are named and remembered, not farmed.
+// freeCaptive releases the prisoner in the current room. Cells and the holding
+// pit are real rescues: they raise standing and emit grid.rescued so the freed
+// are named and remembered, not farmed.
 func (s *session) freeCaptive() {
 	r := s.room()
 	if r.ID == "cells" {
 		s.freeCells()
 		return
 	}
-	switch {
-	case r.Captive == "":
-		s.line("There is no one here to free.")
-		return
-	case s.resolved[r.ID+":free"]:
-		s.line("The cage is already empty. Aid given is aid given, once.")
+	if r.ID == "holding_pit" {
+		s.freeHoldingPit()
 		return
 	}
-	for _, m := range r.Mobs {
-		if m.ID == "warden" {
-			s.line("The warden stands between you and the cage, keys on their belt. You will have to put them down first.")
-			return
-		}
-	}
-	s.markResolved(r.ID, "free")
-	s.shiftMorality(15)
-	s.persist()
-	s.emitRescued([]string{r.Captive})
-	s.line("You strike the chains free. " + capitalize(r.Captive) + " presses something into your hand and is gone into the dark before you can ask a name -- but the Grid keeps the record, names the freed and names who freed them. It will not let this be forgotten.")
-	s.event(event.CharAffects, s.player.Affects())
+	s.line("There is no one here to free.")
 }
 
 // joinTheFront swears the player to the Cinder Front (faction "front"). A hunted

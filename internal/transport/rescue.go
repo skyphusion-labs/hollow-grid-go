@@ -44,6 +44,33 @@ func (s *session) emitRescued(freed []string) {
 	s.srv.rememberSaved(s.player.Name, freed...)
 }
 
+// freeHoldingPit frees the captive maiden after the warden is cleared (dead or
+// within the post-kill grace window). Grants her antidote vial; once you carry
+// it the rescue is done for this character (v0.29.8).
+func (s *session) freeHoldingPit() {
+	if !s.srv.wardenCleared() {
+		s.line("The warden bars your way, keys jangling. Defeat it first.")
+		return
+	}
+	if s.player.HasItem("antidote") {
+		s.line(`The maiden smiles weakly. "You already carry my vial. Use it well."`)
+		return
+	}
+	freed := pickRefugeeNames(1)[0]
+	s.player.AddItem("antidote")
+	s.deed("freed")
+	s.shiftMorality(12)
+	s.persist()
+	s.emitRescued([]string{freed})
+	s.line("You strike the chains free. The captive presses a vial into your hands:" + crlf +
+		fmt.Sprintf(`  "Antivenom, for the poison that haunts these wastes. My name is %s. I won't forget yours."`, freed))
+	s.srv.hub.BroadcastRoom("holding_pit", s.player.Name+" frees "+freed+" from the holding pit!", s.player.Name)
+	s.recordTrace("holding_pit", "quest", s.player.Name+" cut "+freed+" loose from the holding pit.")
+	s.srv.contributeTide(2)
+	s.event(event.CharAffects, s.player.Affects())
+	s.event(event.RoomActions, s.actions(s.room()))
+}
+
 func (s *session) freeCells() {
 	if !s.srv.cagesReady("cells") {
 		s.line("The cages stand open and empty; someone already cut them loose. The Front will round up more soon enough -- it always does -- but not yet.")
