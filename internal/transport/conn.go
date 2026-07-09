@@ -1015,6 +1015,7 @@ func (s *session) recordTrace(node, kind, text string) {
 	ctx := context.Background()
 	now := time.Now().UnixMilli()
 	_ = s.srv.grid.Record(ctx, s.w.Name, node, kind, text, now)
+	s.srv.recordLocalTrace(node, kind, text)
 	if lh, ok := s.srv.grid.(*grid.LocalHub); ok {
 		lh.RecordLocal(node, kind, text)
 	}
@@ -1066,9 +1067,11 @@ func (s *session) cmdPing(arg string) {
 		s.event(event.GridFederation, map[string]any{"traces": feed})
 		return
 	}
-	var rows []grid.EchoTrace
-	if lh, ok := s.srv.grid.(*grid.LocalHub); ok {
-		rows = lh.LocalTraces(s.player.RoomID, 6)
+	rows := s.srv.localTracesFor(s.player.RoomID, 6)
+	if len(rows) == 0 {
+		if lh, ok := s.srv.grid.(*grid.LocalHub); ok {
+			rows = lh.LocalTraces(s.player.RoomID, 6)
+		}
 	}
 	if len(rows) == 0 {
 		s.line("You key into the dead Grid. Static, a cold hum... but this node remembers nothing. Not yet. (try 'ping all')")

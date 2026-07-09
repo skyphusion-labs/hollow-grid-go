@@ -110,6 +110,9 @@ func (s *session) daisDefect() {
 	s.srv.hub.Sync(s.player)
 	s.recordTrace("dais", "oath", s.player.Name+" turned on the Cinder Front at the Ashmonger's own dais.")
 	s.srv.hub.BroadcastRoom("dais", s.player.Name+" has turned against the Cinder Front!", s.player.Name)
+	if s.player.Strayed && !s.player.Redeemed && !s.player.Ashsworn && s.player.Morality >= redeemCeil {
+		s.resolveReturn(s.player)
+	}
 	s.event(event.CharAffects, s.player.Affects())
 	s.event(event.CharVitals, s.player.Vitals())
 	s.event(event.RoomActions, s.actions(s.room()))
@@ -120,6 +123,7 @@ func (s *session) cmdWitness(arg string) {
 	fallen, err := s.srv.grid.RecentFallen(context.Background(), 12)
 	if err != nil {
 		s.line("The Grid is silent; its memory of the fallen is out of reach.")
+		s.event(event.GridFallen, map[string]any{"fallen": []grid.Fallen{}})
 		return
 	}
 	if fallen == nil {
