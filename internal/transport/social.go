@@ -225,11 +225,13 @@ func (s *session) cmdForgive(arg string) {
 	s.deed("forgave")
 	s.recordTrace(s.player.RoomID, "grace", s.player.Name+" forgave "+target.Name+" here.")
 
-	s.srv.hub.push(target.Name, s.player.Name+" looks at you and chooses to forgive you.\r\n")
+	// Forgiveness is player-affecting state for the recipient; deliver it
+	// reliably (same seam as tell/reply), not best-effort.
+	s.srv.hub.PushReliable(target.Name, s.player.Name+" looks at you and chooses to forgive you.\r\n")
 	switch {
 	case target.Ashsworn:
-		s.srv.hub.push(target.Name, "It reaches something in you. But the ash does not lift; it never will. You carry the mark and the mercy both. Some things are not forgotten, even when they are forgiven.\r\n")
-		s.srv.hub.pushEvent(target.Name, event.CharForgiven, map[string]any{
+		s.srv.hub.PushReliable(target.Name, "It reaches something in you. But the ash does not lift; it never will. You carry the mark and the mercy both. Some things are not forgotten, even when they are forgiven.\r\n")
+		s.srv.hub.pushEventReliable(target.Name, event.CharForgiven, map[string]any{
 			"by": s.player.Name, "ashsworn": true, "redeemed": false,
 		})
 	case target.Strayed && !target.Redeemed && target.Faction != "front":
@@ -239,19 +241,19 @@ func (s *session) cmdForgive(arg string) {
 		}
 		s.srv.persistPlayer(target)
 		s.srv.hub.Sync(target)
-		s.srv.hub.pushEvent(target.Name, event.CharForgiven, map[string]any{
+		s.srv.hub.pushEventReliable(target.Name, event.CharForgiven, map[string]any{
 			"by": s.player.Name, "ashsworn": false, "redeemed": true,
 		})
-		s.srv.hub.pushEvent(target.Name, event.GridRedemption, map[string]string{
+		s.srv.hub.pushEventReliable(target.Name, event.GridRedemption, map[string]string{
 			"name": target.Name, "title": target.Title,
 		})
-		s.srv.hub.push(target.Name, "Something you had been carrying alone, you are not carrying alone anymore. You found your way back, and someone met you on the road. (you are the Returned)\r\n")
-		s.srv.hub.pushEvent(target.Name, event.CharAffects, target.Affects())
+		s.srv.hub.PushReliable(target.Name, "Something you had been carrying alone, you are not carrying alone anymore. You found your way back, and someone met you on the road. (you are the Returned)\r\n")
+		s.srv.hub.pushEventReliable(target.Name, event.CharAffects, target.Affects())
 	default:
-		s.srv.hub.pushEvent(target.Name, event.CharForgiven, map[string]any{
+		s.srv.hub.pushEventReliable(target.Name, event.CharForgiven, map[string]any{
 			"by": s.player.Name, "ashsworn": false, "redeemed": false,
 		})
-		s.srv.hub.push(target.Name, "It lands, and it stays with you. The road is still yours to walk, but you are not walking it unseen.\r\n")
+		s.srv.hub.PushReliable(target.Name, "It lands, and it stays with you. The road is still yours to walk, but you are not walking it unseen.\r\n")
 	}
 	s.srv.hub.BroadcastRoomExcept(s.player.RoomID, s.player.Name+" forgives "+target.Name+".\r\n", s.player.Name, target.Name)
 	s.line("You choose to forgive " + target.Name + ". Out here that is not nothing; it may be everything.")
@@ -524,6 +526,15 @@ func (h *Hub) pushEvent(name, evName string, payload any) {
 		return
 	}
 	h.push(name, l+crlf)
+}
+
+// pushEventReliable is the same as pushEvent but retries until delivered.
+func (h *Hub) pushEventReliable(name, evName string, payload any) {
+	l, err := event.Line(evName, payload)
+	if err != nil {
+		return
+	}
+	h.PushReliable(name, l+crlf)
 }
 
 // BroadcastRoomExcept sends prose to everyone in room except two names.
