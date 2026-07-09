@@ -8,6 +8,7 @@
 /vendor/
 # local persistence (character sheets)
 /data/
+.env
 # editor/os
 .DS_Store
 *.swp

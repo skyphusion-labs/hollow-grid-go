@@ -1,20 +1,14 @@
 package world
 
-// seedBonus preserves the framework's first creative opening -- the Grid Gate,
-// Ash Road, the Cinder Checkpoint, and the Memorial Static -- as an additive
-// bonus zone. It carries the same soul as the canonical world (the Cinder Front,
-// a real moral choice, a rite of remembrance) but its own rooms.
-//
-// These rooms are defined and live in the map, but are NOT yet linked into the
-// canonical graph: the conformance suite asserts the canonical opening (start
-// "nexus" and its exits), so a bonus entrance must be grafted carefully -- from a
-// room whose exits the suite does not pin down -- which lands once smoke's exact
-// exit assertions are confirmed. Until then the zone is preserved, not reachable.
+// seedBonus preserves Rust Choir's signature zone: the Grid Gate, Ash Road, the
+// Cinder Checkpoint, and the Memorial Static. Grafted from the service tunnels
+// (east of the canonical nexus down-path) so the conformance opening stays pinned
+// on the Cracked Nexus while this world offers its own moral geography.
 func (w *World) seedBonus() {
 	rooms := []*Room{
 		{ID: "grid-gate", Name: "The Grid Gate",
 			Desc:  "A dead terminal hums where the network once breathed. Cables trail into the dark like roots, and a single cursor blinks at nothing, patient as a heartbeat. Whatever ran here did not shut down. It was left.",
-			Exits: map[string]string{"north": "ash-road"}},
+			Exits: map[string]string{"north": "ash-road", "west": "tunnels"}},
 		{ID: "ash-road", Name: "Ash Road", Outdoors: true,
 			Desc:  "Grey dunes swallow a cracked highway. The wind carries static and the smell of rust. The Gate glows faintly to the south; to the north a checkpoint bleeds firelight, and eastward a wall of dead screens flickers with names.",
 			Exits: map[string]string{"south": "grid-gate", "north": "cinder-checkpoint", "east": "memorial-static"}},

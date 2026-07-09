@@ -23,7 +23,7 @@ func newWorldServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
-	srv := NewServer(world.New("Test World", ""), st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := NewServer(world.New("Test World", ""), st, nil, []string{"skyphusion"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(srv.Handler())
 	// Drain in-flight sessions (and their final persists) before temp-dir cleanup.
 	t.Cleanup(func() {

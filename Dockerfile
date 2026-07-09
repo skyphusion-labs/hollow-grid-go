@@ -24,5 +24,6 @@ COPY --from=build /world /world
 VOLUME ["/data"]
 EXPOSE 8790
 ENTRYPOINT ["/world"]
-# Overridable: e.g. docker run ... hollow-grid-go --world-name Dustfall --world-url wss://...
-CMD ["--addr", ":8790", "--data", "/data", "--world-name", "The Hollow Grid (Go)"]
+# Overridable via flags or env (LISTEN_ADDR, DATA_DIR, WORLD_NAME, WORLD_URL,
+# GRID_HUB_URL, GRID_HUB_TOKEN). See compose.yaml and .env.example.
+CMD ["--addr", ":8790", "--data", "/data", "--world-name", "Rust Choir"]

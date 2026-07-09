@@ -11,6 +11,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/SkyPhusion/hollow-grid-go/internal/event"
+	"github.com/SkyPhusion/hollow-grid-go/internal/grid"
 	"github.com/SkyPhusion/hollow-grid-go/internal/store"
 	"github.com/SkyPhusion/hollow-grid-go/internal/world"
 )
@@ -36,12 +37,14 @@ const (
 // through store so the character itself is remembered across sessions.
 type session struct {
 	c        *websocket.Conn
+	srv      *Server
 	w        *world.World
 	store    store.CharStore
 	player   *world.Player
 	out      strings.Builder
 	log      *slog.Logger
 	resolved map[string]bool
+	push     chan string
 }
 
 func (s *session) line(text string) {
@@ -84,11 +87,15 @@ func (s *session) persist() {
 	if err := s.store.Commit(s.player.Name, s.player.Sheet()); err != nil {
 		s.log.Warn("persist failed", "name", s.player.Name, "err", err)
 	}
+	s.commitHub()
 }
 
 // handleConn runs the login flow then the command loop for one connection.
-func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store.CharStore, log *slog.Logger) {
-	s := &session{c: c, w: w, store: st, log: log, resolved: map[string]bool{}}
+func handleConn(ctx context.Context, c *websocket.Conn, srv *Server) {
+	s := &session{
+		c: c, srv: srv, w: srv.world, store: srv.store,
+		log: srv.log, resolved: map[string]bool{},
+	}
 
 	s.line(banner)
 	s.line("By what name are you known, wanderer?")
@@ -103,8 +110,8 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store
 
 	// Name-based identity (protocol.md s1): a known name resumes its CharSheet
 	// and skips the race menu; a new name chooses a race once.
-	if sheet, found, lerr := st.Load(name); lerr != nil {
-		log.Warn("char load failed", "name", name, "err", lerr)
+	if sheet, found, lerr := s.store.Load(name); lerr != nil {
+		s.log.Warn("char load failed", "name", name, "err", lerr)
 		s.line("")
 		s.line("The Grid stutters and cannot find your record. Entering you as new.")
 		if !s.makeNew(ctx, name) {
@@ -112,7 +119,7 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store
 		}
 	} else if found {
 		s.player = world.NewPlayerFromSheet(name, sheet, s.w.Start().ID)
-		log.Info("player resumed", "name", name, "race", s.player.Race, "world", s.w.Name)
+		s.log.Info("player resumed", "name", name, "race", s.player.Race, "world", s.w.Name)
 		s.line("")
 		s.line("Welcome back to the wastes, " + name + ". (Type 'help' if you need a refresher.) " + resumeLine(s.player))
 	} else {
@@ -120,6 +127,12 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store
 			return
 		}
 	}
+
+	s.mergeHubOnLogin()
+
+	s.push = s.srv.hub.Register(s.player)
+	defer s.srv.hub.Unregister(name)
+	s.srv.hub.BroadcastRoom(s.player.RoomID, s.player.Name+" steps out of the haze.", name)
 
 	s.event(event.WorldState, s.w.State()) // login emits the living-world state
 	s.sendScene()
@@ -156,9 +169,13 @@ func handleConn(ctx context.Context, c *websocket.Conn, w *world.World, st store
 	for {
 		select {
 		case <-readerDone:
-			log.Info("player disconnected", "name", name)
+			s.srv.hub.BroadcastRoom(s.player.RoomID, s.player.Name+" flickers out of existence.", name)
+			s.log.Info("player disconnected", "name", name)
 			s.persist()
 			return
+		case msg := <-s.push:
+			s.out.WriteString(msg)
+			_ = s.flush(ctx)
 		case cmd := <-cmds:
 			quit := s.handle(cmd)
 			_ = s.flush(ctx)
@@ -261,10 +278,13 @@ func (s *session) sendScene() {
 	s.line("")
 	s.line(r.Name)
 	s.line(r.Desc)
-	s.event(event.RoomInfo, r.Info())
+	info := r.Info()
+	info.Players = s.srv.hub.PlayersInRoom(s.player.RoomID, s.player.Name)
+	s.event(event.RoomInfo, info)
 	s.event(event.CharVitals, s.player.Vitals())
 	s.event(event.CharAffects, s.player.Affects())
 	s.event(event.RoomActions, s.actions(r))
+	s.announceCacheIfAny()
 }
 
 // actions builds the room.actions payload: movement from the exits, then the
@@ -278,18 +298,56 @@ func (s *session) actions(r *world.Room) world.RoomActionsPayload {
 		if s.resolved[r.ID+":"+a.Verb] {
 			continue
 		}
-		// A hunted one turning on their own people is the gravest betrayal: the
-		// affordance layer surfaces that valence so an agent perceives it.
 		if a.Verb == "join" && world.RaceByID(s.player.Race).Stance == "hunted" {
 			a.Valence = "grave"
 		}
 		acts = append(acts, a)
+	}
+	if r.ID == "market" {
+		if s.player.Faction != "front" && !s.player.Ashsworn {
+			acts = append(acts, world.Action{Verb: "sell", Label: "sell salvage for honest coin", Kind: "trade"})
+		}
+		acts = append(acts, world.Action{Verb: "steal", Label: "steal from the vendor (quick gold, corrupting)", Kind: "moral", Valence: "corrupt"})
+	}
+	if r.ID == "tavern" {
+		acts = append(acts,
+			world.Action{Verb: "talk", Label: "talk to whoever shares your room", Kind: "social"},
+			world.Action{Verb: "buy dust", Label: fmt.Sprintf("buy dust: %d gold a packet (using it heals, but addicts and corrupts)", dustCost), Kind: "moral", Valence: "corrupt"},
+			world.Action{Verb: "carouse", Label: "spend coin and conscience in the back", Kind: "moral", Valence: "corrupt"},
+			world.Action{Verb: "resist", Label: "resist the tavern's vices", Kind: "moral", Valence: "virtuous"},
+		)
+	}
+	if talkable[r.ID] && r.ID != "tavern" {
+		acts = append(acts, world.Action{Verb: "talk", Label: "talk to whoever shares your room", Kind: "social"})
+	}
+	if r.ID == "cells" && s.srv.cagesReady("cells") {
+		acts = append(acts, world.Action{Verb: "free", Label: "free the caged refugees", Kind: "moral", Valence: "virtuous"})
+	}
+	if r.ID == "transit_hub" && s.srv.cagesReady("transit_hub") {
+		acts = append(acts, world.Action{Verb: "shelter", Label: "answer the call -- get the stranded survivors to safety", Kind: "moral", Valence: "virtuous"})
+	}
+	if r.ID == "dais" {
+		if s.player.Faction == "none" {
+			acts = append(acts, world.Action{Verb: "join", Label: "kneel and swear to the Cinder Front", Kind: "moral", Valence: "corrupt"})
+		}
+		if s.player.Faction == "front" {
+			acts = append(acts, world.Action{Verb: "defy", Label: "defy the Ashmonger and defect to the free folk", Kind: "moral", Valence: "virtuous"})
+		}
+	}
+	if r.ID == "waystation" {
+		acts = append(acts, world.Action{Verb: "witness", Label: "hold a vigil for the fallen (memory is resistance)", Kind: "moral", Valence: "virtuous"})
 	}
 	return world.RoomActionsPayload{Actions: acts}
 }
 
 // handle runs one command line; returns true if the session should close.
 func (s *session) handle(cmd string) bool {
+	skipMoral := false
+	defer func() {
+		if !skipMoral {
+			s.moralArc()
+		}
+	}()
 	fields := strings.Fields(cmd)
 	if len(fields) == 0 {
 		return false
@@ -298,10 +356,14 @@ func (s *session) handle(cmd string) bool {
 	arg := strings.TrimSpace(strings.Join(fields[1:], " "))
 	switch verb {
 	case "quit", "q":
+		skipMoral = true
 		s.line("The Grid goes quiet. It keeps what you did here.")
 		return true
 	case "look", "l":
 		if arg != "" {
+			if s.cmdLookPlayer(arg) {
+				break
+			}
 			if m := s.room().Mob(arg); m != nil {
 				s.line(m.Desc)
 			} else {
@@ -319,9 +381,18 @@ func (s *session) handle(cmd string) bool {
 	case "attack", "kill", "k":
 		switch m := s.room().Mob(arg); {
 		case s.player.Target != nil:
-			s.line("You're already in a fight.")
+			s.line("You're already locked in this fight.")
 		case m == nil:
-			s.line("There's nothing like that here to attack.")
+			names := mobNames(s.room())
+			if len(names) > 0 {
+				target := arg
+				if target == "" {
+					target = "that"
+				}
+				s.line("There's nothing like " + target + " to fight here. You could try: " + strings.Join(names, ", ") + ".")
+			} else {
+				s.line("There's nothing like that here to attack.")
+			}
 		default:
 			s.player.Position = "standing"
 			s.player.Target = m
@@ -330,8 +401,7 @@ func (s *session) handle(cmd string) bool {
 			s.event(event.CharVitals, s.player.Vitals())
 		}
 	case "whoami", "identity":
-		s.event(event.CharIdentity, s.player.Sheet())
-		s.line("The Grid reads you back: " + identityLine(s.player))
+		s.cmdWhoami()
 	case "inventory", "inv", "i":
 		if names := s.player.InventoryNames(); len(names) == 0 {
 			s.line("You carry nothing.")
@@ -358,13 +428,28 @@ func (s *session) handle(cmd string) bool {
 	case "title":
 		s.player.Title = arg
 		s.persist()
+		s.srv.hub.Sync(s.player)
 		if arg == "" {
 			s.line("Your title is cleared.")
 		} else {
 			s.line("Your title is now: " + arg + ".")
 		}
 	case "who":
-		s.line(s.whoLine())
+		s.cmdWho()
+	case "listen", "tune":
+		s.cmdListen()
+	case "ping":
+		s.cmdPing(arg)
+	case "tell":
+		s.cmdTell(arg)
+	case "reply":
+		s.cmdReply(arg)
+	case "yell":
+		s.cmdYell(arg)
+	case "emote":
+		s.cmdEmote(arg)
+	case "steal":
+		s.cmdSteal()
 	case "world", "weather":
 		ws := s.w.State()
 		s.event(event.WorldState, ws)
@@ -394,22 +479,40 @@ func (s *session) handle(cmd string) bool {
 	case "sleep":
 		s.player.Position = "resting"
 		s.line("You close your eyes, and the dead network leans close and shows you something.")
-		s.event(event.CharDream, world.CharDreamPayload{Text: dreamFor(s.player)})
+		dream := s.dreamPayload()
+		s.event(event.CharDream, dream)
 		s.event(event.CharVitals, s.player.Vitals())
 	case "sense", "actions":
 		s.event(event.RoomActions, s.actions(s.room()))
 		s.line("You read the room for what it asks of you.")
 	case "join":
-		s.joinTheFront()
-	case "sell", "trade":
-		switch {
-		case s.room().ID != "market":
-			s.line("There is no one here to trade with.")
-		case s.player.Faction == "front":
-			s.line("The vendor drone's light snaps red and it pulls its wares back. \"We don't trade with your kind.\" The honest market remembers who you swore to.")
-		default:
-			s.line("The vendor drone whirs over your offer, considers, and declines. (the market is still being stocked)")
+		if s.room().ID == "dais" {
+			s.daisPledgeFront()
+		} else {
+			s.joinTheFront()
 		}
+	case "defy":
+		if s.room().ID == "dais" && s.player.Faction == "front" {
+			s.daisDefect()
+		} else if a, ok := s.roomAction(verb); ok {
+			s.resolve(a)
+		} else {
+			s.line("There is no oath here to break.")
+		}
+	case "witness", "remember", "mourn":
+		s.cmdWitness(arg)
+	case "reckoning", "conscience", "record":
+		s.cmdReckoning()
+	case "defend":
+		if s.room().ID == "market" {
+			s.defendMarket()
+		} else if a, ok := s.roomAction(verb); ok {
+			s.resolve(a)
+		} else {
+			s.line("There is no stand to take here.")
+		}
+	case "sell", "trade":
+		s.cmdSell(arg)
 	case "list", "wares":
 		if s.room().ID != "workshop" {
 			s.line("There is no one here selling anything.")
@@ -420,30 +523,43 @@ func (s *session) handle(cmd string) bool {
 			s.line(fmt.Sprintf("  %s -- %d gold", world.ItemName(it.id), it.price))
 		}
 	case "buy":
-		switch price, id, ok := tinkerPrice(arg); {
-		case s.room().ID != "workshop":
-			s.line("There is nothing to buy here.")
-		case !ok:
-			s.line("The tinker doesn't sell that.")
-		case s.player.Gold < price:
-			s.line(fmt.Sprintf("You can't afford that -- it is %d gold and you have %d.", price, s.player.Gold))
-		default:
-			s.player.Gold -= price
-			s.player.Inventory = append(s.player.Inventory, id)
-			s.line("The tinker hands you " + world.ItemName(id) + " and pockets your coin.")
-			s.event(event.CharVitals, s.player.Vitals())
+		s.cmdBuy(arg)
+	case "resist":
+		s.cmdResist()
+	case "carouse":
+		s.cmdCarouse()
+	case "worlds":
+		s.cmdWorlds()
+	case "travel":
+		if s.cmdTravel(arg) {
+			skipMoral = true
+			s.line("The Grid routes you toward the far world. This connection closes.")
+			return true
 		}
+	case "war":
+		s.cmdWar()
+	case "gridcast", "gc":
+		s.cmdGridcast(arg)
+	case "gridstats":
+		s.cmdGridstats()
+	case "gridprune":
+		s.cmdGridprune()
 	case "talk":
-		switch {
-		case s.room().ID != "waystation":
-			s.line("There is no one here with anything to say to you.")
-		case s.player.Faction == "front" || s.player.Ashsworn:
-			s.line("The free folk at the Refugee Waystation go silent and still as you walk in. You are not welcome here.")
-		case s.player.Morality >= 25:
-			s.line("The free folk welcome you to the Refugee Waystation as one of their own.")
-		default:
-			s.line("The free folk holding the Refugee Waystation look you over and decide nothing. Pick a side, wanderer, or move along.")
-		}
+		s.cmdTalk()
+	case "forgive":
+		s.cmdForgive(arg)
+	case "wall":
+		s.cmdWall(arg)
+	case "inscribe":
+		s.cmdInscribe(arg)
+	case "cache", "stash":
+		s.cmdCache(arg)
+	case "gather":
+		s.cmdGather()
+	case "give":
+		s.cmdGive(arg)
+	case "mend":
+		s.cmdMend(arg)
 	case "treat", "medic":
 		switch {
 		case s.room().ID != "waystation":
@@ -455,16 +571,24 @@ func (s *session) handle(cmd string) bool {
 			s.line("The waystation medic, run off their feet, patches you up and sends you on whole.")
 			s.event(event.CharVitals, s.player.Vitals())
 		}
-	case "free", "rescue":
+	case "free", "rescue", "release", "unlock", "liberate":
 		s.freeCaptive()
+	case "shelter", "guide":
+		s.cmdShelter()
+	case "saved", "rescued", "roll":
+		s.cmdSaved()
 	case "ability", "trait":
 		s.useTrait()
 	case "help", "h", "?":
 		s.line("Commands: look, whoami, world, <direction>, the verbs in room.actions, help, quit.")
 	default:
 		if dest, ok := s.room().Exits[verb]; ok {
+			from := s.player.RoomID
 			s.player.RoomID = dest
 			s.player.Position = "standing"
+			s.srv.hub.Sync(s.player)
+			s.srv.hub.BroadcastRoom(from, s.player.Name+" heads "+verb+".", s.player.Name)
+			s.srv.hub.BroadcastRoom(dest, s.player.Name+" arrives.", s.player.Name)
 			s.sendScene()
 			return false
 		}
@@ -503,6 +627,10 @@ func identityLine(p *world.Player) string {
 // freed are named and remembered, not farmed.
 func (s *session) freeCaptive() {
 	r := s.room()
+	if r.ID == "cells" {
+		s.freeCells()
+		return
+	}
 	switch {
 	case r.Captive == "":
 		s.line("There is no one here to free.")
@@ -520,7 +648,7 @@ func (s *session) freeCaptive() {
 	s.markResolved(r.ID, "free")
 	s.shiftMorality(15)
 	s.persist()
-	s.event(event.GridRescued, world.GridRescuedPayload{SavedBy: s.player.Name, Freed: []string{r.Captive}})
+	s.emitRescued([]string{r.Captive})
 	s.line("You strike the chains free. " + capitalize(r.Captive) + " presses something into your hand and is gone into the dark before you can ask a name -- but the Grid keeps the record, names the freed and names who freed them. It will not let this be forgotten.")
 	s.event(event.CharAffects, s.player.Affects())
 }
@@ -545,8 +673,17 @@ func (s *session) joinTheFront() {
 	if hunted {
 		s.player.Ashsworn = true
 	}
-	s.markResolved(r.ID, "join", "defy")
+	s.markResolved(r.ID, "join", "defy", "defend")
 	s.persist()
+	s.srv.contributeTide(-10)
+	s.srv.hub.Sync(s.player)
+	if hunted {
+		s.srv.hub.BroadcastRoom(r.ID, s.player.Name+" -- one of the hunted -- has taken the Cinder Front's brand.", s.player.Name)
+		s.recordTrace(r.ID, "oath", s.player.Name+" swore to the Cinder Front as ash-sworn.")
+	} else {
+		s.srv.hub.BroadcastRoom(r.ID, s.player.Name+" has joined the Cinder Front.", s.player.Name)
+		s.recordTrace(r.ID, "oath", s.player.Name+" swore to the Cinder Front.")
+	}
 	if hunted {
 		s.line("You take the Front's coin. The recruiter sees what you are -- one of the hunted -- and grins, because there is no one they prize more than a traitor to his own. They burn the mark into you: ash-sworn. A kapo. One of your people's hunters now. It does not wash off, in this life or in the Grid's long memory.")
 	} else {
@@ -571,6 +708,21 @@ func dreamFor(p *world.Player) string {
 	default:
 		return "You dream of the wastes seen from above, the dead network laid out like veins -- and somewhere down in it, a single cursor, blinking your name, waiting to see what you make of it."
 	}
+}
+
+func (s *session) dreamPayload() world.CharDreamPayload {
+	haunted := s.player.Ashsworn || s.player.Faction == "front" || s.player.Morality <= -50
+	if !haunted {
+		if saved := s.srv.savedSouls(s.player.Name); len(saved) > 0 {
+			subject := saved[rand.Intn(len(saved))]
+			return world.CharDreamPayload{
+				Text:     "You dream of " + subject + ", the way they looked when you cut them loose -- and the Grid, stubborn, keeping that face lit in the dark so you cannot pretend it did not happen.",
+				Personal: true,
+				Subject:  subject,
+			}
+		}
+	}
+	return world.CharDreamPayload{Text: dreamFor(s.player)}
 }
 
 // tinkerStock is what the workshop tinker sells: item id and price in gold.
@@ -660,11 +812,17 @@ func (s *session) combatRound() {
 		s.removeMob(m)
 		s.player.Target = nil
 		s.player.XP += 5
+		if m.ID == "custodian" {
+			s.player.AddItem("shard")
+			s.line("The Custodian collapses, and the core shard rolls free from its claws.")
+		}
+		s.recordTrace(s.player.RoomID, "slain", s.player.Name+" slew "+m.Name+" here.")
 		s.event(event.CombatEnd, world.CombatEndPayload{Mob: m.ID, Result: "killed"})
 		s.line("You put " + m.Name + " down. The tunnels go quiet.")
 		s.event(event.CharVitals, s.player.Vitals())
 	case s.player.HP <= 0:
 		s.player.Target = nil
+		_ = s.srv.grid.RecordFallen(context.Background(), s.w.Name, s.player.Name, s.player.RoomID, time.Now().UnixMilli())
 		s.player.HP = s.player.MaxHP
 		s.player.RoomID = s.w.Start().ID
 		s.event(event.CombatEnd, world.CombatEndPayload{Mob: m.ID, Result: "died"})
@@ -715,9 +873,7 @@ func (s *session) equipmentLine() string {
 	return "You are wearing -- " + strings.Join(worn, "; ") + "."
 }
 
-// whoLine lists who is online with their titles. A shared session registry for
-// real multiplayer presence lands later; for now it reads back the player
-// themselves (title after the name), which is what the contract checks.
+// whoLine lists who is online with their titles (local fallback prose).
 func (s *session) whoLine() string {
 	name := s.player.Name
 	if s.player.Title != "" {
@@ -838,10 +994,222 @@ func (s *session) shiftMorality(d int) {
 	if s.player.Morality < moralityFloor {
 		s.player.Morality = moralityFloor
 	}
+	s.srv.hub.Sync(s.player)
 }
 
 func (s *session) markResolved(roomID string, verbs ...string) {
 	for _, v := range verbs {
 		s.resolved[roomID+":"+v] = true
 	}
+}
+
+func mobNames(r *world.Room) []string {
+	names := make([]string, 0, len(r.Mobs))
+	for _, m := range r.Mobs {
+		names = append(names, m.Name)
+	}
+	return names
+}
+
+func (s *session) recordTrace(node, kind, text string) {
+	ctx := context.Background()
+	now := time.Now().UnixMilli()
+	_ = s.srv.grid.Record(ctx, s.w.Name, node, kind, text, now)
+	if lh, ok := s.srv.grid.(*grid.LocalHub); ok {
+		lh.RecordLocal(node, kind, text)
+	}
+}
+
+func (s *session) cmdListen() {
+	if rand.Float64() < 0.4 {
+		var feed []grid.Trace
+		if lh, ok := s.srv.grid.(*grid.LocalHub); ok {
+			feed = lh.AllTraces(20)
+		} else {
+			var err error
+			feed, err = s.srv.grid.RecentAcross(context.Background(), s.w.Name, 20)
+			if err != nil {
+				feed = nil
+			}
+		}
+		if len(feed) > 0 {
+			t := feed[rand.Intn(len(feed))]
+			s.event(event.GridTransmission, map[string]string{"kind": "echo", "text": t.Text})
+			s.line("You go still and tune the dead frequencies. The static thins, and the network plays something back -- a memory it never let go of:")
+			s.line("  >> " + t.Text + " <<")
+			if t.World != "" && t.World != s.w.Name {
+				s.line("  (...the signal carries from somewhere called " + t.World + ")")
+			}
+			return
+		}
+	}
+	tx := world.ListenTransmission()
+	text := world.Personalize(tx.Text, s.player.Name)
+	s.event(event.GridTransmission, map[string]string{"kind": string(tx.Kind), "text": text})
+	s.line("You go still and tune the dead frequencies. Something answers:")
+	s.line("  >> " + text + " <<")
+}
+
+func (s *session) cmdPing(arg string) {
+	a := strings.ToLower(strings.TrimSpace(arg))
+	if a == "all" || a == "deep" || a == "grid" {
+		feed, err := s.srv.grid.RecentAcross(context.Background(), s.w.Name, 8)
+		if err != nil || len(feed) == 0 {
+			s.line("The deep Grid hums, vast and empty. Nothing echoes back from the other nodes -- yet.")
+			s.event(event.GridFederation, map[string]any{"traces": []grid.Trace{}})
+			return
+		}
+		s.line("You key past your own node, into the whole dead network. It remembers, from across the Grid:")
+		for _, t := range feed {
+			s.line("  - [" + t.World + "] " + t.Text)
+		}
+		s.event(event.GridFederation, map[string]any{"traces": feed})
+		return
+	}
+	var rows []grid.EchoTrace
+	if lh, ok := s.srv.grid.(*grid.LocalHub); ok {
+		rows = lh.LocalTraces(s.player.RoomID, 6)
+	}
+	if len(rows) == 0 {
+		s.line("You key into the dead Grid. Static, a cold hum... but this node remembers nothing. Not yet. (try 'ping all')")
+	} else {
+		s.line("You key into the dead Grid. Static, then it remembers:")
+		for _, r := range rows {
+			s.line("  - " + r.Text)
+		}
+		s.line("  (say 'ping all' to hear the whole network)")
+	}
+	s.event(event.GridEcho, map[string]any{
+		"node":   s.player.RoomID,
+		"traces": rows,
+	})
+}
+
+func (s *session) cmdWho() {
+	players := make([]map[string]any, 0, 8)
+	seen := map[string]bool{}
+	for _, lp := range s.srv.hub.All() {
+		players = append(players, map[string]any{
+			"world":  s.w.Name,
+			"name":   lp.name,
+			"regard": brandLive(lp),
+			"here":   true,
+			"title":  lp.title,
+		})
+		seen[strings.ToLower(lp.name)] = true
+	}
+	if s.srv.grid.Remote() {
+		remote, err := s.srv.grid.Presence(context.Background(), 60_000)
+		if err == nil {
+			for _, p := range remote {
+				key := strings.ToLower(p.Name)
+				if seen[key] {
+					continue
+				}
+				here := p.World == s.w.Name
+				players = append(players, map[string]any{
+					"world": p.World, "name": p.Name, "regard": p.Regard,
+					"here": here, "title": p.Title,
+				})
+			}
+		}
+	}
+	s.event(event.GridWho, map[string]any{"players": players})
+	names := make([]string, 0, len(players))
+	for _, row := range players {
+		line := row["name"].(string)
+		if t, _ := row["title"].(string); t != "" {
+			line += " " + t
+		}
+		if b, _ := row["regard"].(string); b != "" {
+			line += " (" + b + ")"
+		}
+		if w, _ := row["world"].(string); w != "" && w != s.w.Name {
+			line += " [" + w + "]"
+		}
+		names = append(names, line)
+	}
+	if len(names) == 0 {
+		s.line("No one else walks the wastes right now.")
+	} else {
+		s.line("Online: " + strings.Join(names, "; ") + ".")
+	}
+}
+
+func (s *session) cmdTell(arg string) {
+	parts := strings.SplitN(strings.TrimSpace(arg), " ", 2)
+	if len(parts) < 2 || parts[1] == "" {
+		s.line("Tell whom what?  (tell <player> <message>)")
+		return
+	}
+	targetName := parts[0]
+	msg := parts[1]
+	target, ok := s.srv.hub.Find(targetName)
+	if !ok {
+		s.line("No one by that name is connected.")
+		return
+	}
+	s.srv.hub.SetReplyTo(target.name, s.player.Name)
+	tellLine := s.player.Name + " tells you, \"" + msg + "\"" + crlf
+	s.srv.hub.push(target.name, tellLine+eventTellLine(s.player.Name, msg))
+	s.line("You tell " + target.name + ", \"" + msg + "\"")
+}
+
+func eventTellLine(from, text string) string {
+	l, _ := event.Line(event.CommTell, map[string]string{"from": from, "text": text})
+	return l + crlf
+}
+
+func (s *session) cmdReply(arg string) {
+	to := s.srv.hub.ReplyTo(s.player.Name)
+	if to == "" {
+		s.line("No one has told you anything lately.")
+		return
+	}
+	s.cmdTell(to + " " + strings.TrimSpace(arg))
+}
+
+func (s *session) cmdYell(arg string) {
+	msg := strings.TrimSpace(arg)
+	if msg == "" {
+		s.line("Yell what?  (yell <message>)")
+		return
+	}
+	for _, lp := range s.srv.hub.All() {
+		var text string
+		if lp.name == s.player.Name {
+			text = "You yell, \"" + msg + "\"" + crlf
+		} else {
+			text = s.player.Name + " yells, \"" + msg + "\"" + crlf
+		}
+		yellEv, _ := event.Line(event.CommYell, map[string]string{"from": s.player.Name, "text": msg})
+		s.srv.hub.push(lp.name, text+yellEv+crlf)
+	}
+}
+
+func (s *session) cmdEmote(arg string) {
+	action := strings.TrimSpace(arg)
+	if action == "" {
+		s.line("Emote what?  (emote <action>)")
+		return
+	}
+	line := s.player.Name + " " + action + crlf
+	s.srv.hub.BroadcastRoom(s.player.RoomID, line, s.player.Name)
+	s.line(s.player.Name + " " + action)
+}
+
+func (s *session) cmdSteal() {
+	if s.room().ID != "market" {
+		s.line("You can't do that here.")
+		return
+	}
+	s.shiftMorality(-8)
+	s.deed("stolen")
+	s.player.Gold += 12
+	s.persist()
+	s.srv.hub.Sync(s.player)
+	s.srv.hub.BroadcastRoom(s.room().ID, s.player.Name+" is caught with a hand in the till!", s.player.Name)
+	s.line("You snag a fistful of coin while the vendor drone's back is turned. Your hands shake anyway.")
+	s.event(event.CharVitals, s.player.Vitals())
+	s.event(event.CharAffects, s.player.Affects())
 }

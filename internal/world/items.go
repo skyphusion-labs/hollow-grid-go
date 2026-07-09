@@ -25,6 +25,9 @@ var Items = map[string]Item{
 	"rebar":   {ID: "rebar", Name: "a length of rebar", Slot: "weapon", Damage: 6},
 	"helm":    {ID: "helm", Name: "a dented scrap helm", Slot: "head", Armor: 1},
 	"plating": {ID: "plating", Name: "a sheet of scrap plating", Slot: "body", Armor: 2},
+	"charm":   {ID: "charm", Name: "an elven charm", Slot: ""},
+	"dust":    {ID: "dust", Name: "a packet of dust", Slot: ""},
+	"shard":   {ID: "shard", Name: "the core shard", Slot: ""},
 }
 
 // ItemByID returns the item definition for an id.
@@ -63,6 +66,9 @@ func (p *Player) Equip() CharEquipmentPayload {
 		Hands: slot("hands"), Feet: slot("feet"),
 	}
 }
+
+// FindInventory resolves a typed arg to an inventory item id.
+func (p *Player) FindInventory(arg string) (string, bool) { return p.findInventory(arg) }
 
 // findInventory resolves a player's typed arg to an inventory item id: an exact
 // id, or a case-insensitive substring of the id or display name.
@@ -133,7 +139,12 @@ func (p *Player) Unwear(arg string) (Item, bool) {
 	return it, true
 }
 
-// InventoryNames lists the display names of everything in the pack.
+// AddItem puts one copy of id into the pack.
+func (p *Player) AddItem(id string) { p.Inventory = append(p.Inventory, id) }
+
+// RemoveFromInventory drops one copy of id from the pack.
+func (p *Player) RemoveFromInventory(id string) { p.removeFromInventory(id) }
+
 func (p *Player) InventoryNames() []string {
 	names := make([]string, 0, len(p.Inventory))
 	for _, id := range p.Inventory {

@@ -1,7 +1,7 @@
 // Command world runs a single Hollow Grid world server (a node on the Grid).
 //
-// It is fully playable standalone; federation (joining the Grid) is additive and
-// arrives in a later phase. See docs/protocol.md and docs/PLAN.md.
+// It is fully playable standalone; federation (joining the Grid) is additive.
+// See docs/protocol.md and docs/PLAN.md.
 package main
 
 import (
@@ -12,20 +12,59 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/SkyPhusion/hollow-grid-go/internal/grid"
 	"github.com/SkyPhusion/hollow-grid-go/internal/store"
 	"github.com/SkyPhusion/hollow-grid-go/internal/transport"
 	"github.com/SkyPhusion/hollow-grid-go/internal/world"
 )
 
+// applyEnv fills empty flags from the container-friendly env vars (compose, k8s).
+func applyEnv(addr, name, url, data, admins, gridHubURL, gridHubToken *string) {
+	if *addr == ":8790" {
+		if v := strings.TrimSpace(os.Getenv("LISTEN_ADDR")); v != "" {
+			*addr = v
+		}
+	}
+	if *name == "Rust Choir" {
+		if v := strings.TrimSpace(os.Getenv("WORLD_NAME")); v != "" {
+			*name = v
+		}
+	}
+	if *url == "" {
+		*url = strings.TrimSpace(os.Getenv("WORLD_URL"))
+	}
+	if *data == "data" {
+		if v := strings.TrimSpace(os.Getenv("DATA_DIR")); v != "" {
+			*data = v
+		}
+	}
+	if *admins == "skyphusion" {
+		if v := strings.TrimSpace(os.Getenv("ADMINS")); v != "" {
+			*admins = v
+		}
+	}
+	if *gridHubURL == "" {
+		*gridHubURL = strings.TrimSpace(os.Getenv("GRID_HUB_URL"))
+	}
+	if *gridHubToken == "" {
+		*gridHubToken = strings.TrimSpace(os.Getenv("GRID_HUB_TOKEN"))
+	}
+}
+
 func main() {
 	addr := flag.String("addr", ":8790", "listen address")
-	name := flag.String("world-name", "The Hollow Grid (Go)", "world display name")
-	url := flag.String("world-url", "", "this world's public URL (for the federation registry)")
+	name := flag.String("world-name", "Rust Choir", "world display name")
+	url := flag.String("world-url", "", "this world's public URL (for the federation registry, e.g. wss://rustchoir.skyphusion.org/ws)")
 	data := flag.String("data", "data", "directory for local character persistence")
+	admins := flag.String("admins", "skyphusion", "comma-separated keeper names (wall command)")
+	gridHubURL := flag.String("grid-hub-url", "", "Grid Hub HTTP RPC URL (e.g. https://grid-hub.example/rpc); omit for standalone LocalHub")
+	gridHubToken := flag.String("grid-hub-token", "", "Bearer token for Grid Hub RPC (GRID_RPC_TOKEN)")
 	flag.Parse()
+	applyEnv(addr, name, url, data, admins, gridHubURL, gridHubToken)
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
@@ -36,7 +75,22 @@ func main() {
 	}
 
 	w := world.New(*name, *url)
-	srv := transport.NewServer(w, st, log)
+	var adminList []string
+	for _, a := range strings.Split(*admins, ",") {
+		if t := strings.TrimSpace(a); t != "" {
+			adminList = append(adminList, t)
+		}
+	}
+	var gh grid.Hub
+	if strings.TrimSpace(*gridHubURL) != "" {
+		gh = grid.NewRemoteHub(*gridHubURL, *gridHubToken)
+		log.Info("federation enabled", "grid_hub", *gridHubURL)
+	}
+	srv := transport.NewServer(w, st, gh, adminList, log)
+
+	fedCtx, fedCancel := context.WithCancel(context.Background())
+	defer fedCancel()
+	srv.RunFederation(fedCtx)
 
 	httpSrv := &http.Server{
 		Addr:              *addr,
