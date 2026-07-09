@@ -1,0 +1,31 @@
+# Rust Choir on the Hollow Grid (Go port). Pull the GHCR image after merge to
+# main, or build locally: docker compose build
+#
+# Federation: set GRID_HUB_URL + GRID_HUB_TOKEN in .env (see .env.example).
+# Standalone works with those unset (LocalHub fallback).
+#
+# Fleet / mud-bots: bind 0.0.0.0:8790 and set WORLD_URL to the mesh-reachable
+# address bots use (e.g. ws://10.0.96.4:8790/ws).
+
+services:
+  rust-choir:
+    image: ghcr.io/skyphusion-labs/hollow-grid-go:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8790:8790"
+    volumes:
+      - rust-choir-data:/data
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      LISTEN_ADDR: ":8790"
+      DATA_DIR: /data
+      WORLD_NAME: Rust Choir
+      # WORLD_URL: wss://rustchoir.skyphusion.org/ws
+      # GRID_HUB_URL: https://grid-hub.example/rpc
+      # GRID_HUB_TOKEN: set in .env (never commit)
+
+volumes:
+  rust-choir-data:

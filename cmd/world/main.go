@@ -1,7 +1,7 @@
 // Command world runs a single Hollow Grid world server (a node on the Grid).
 //
-// It is fully playable standalone; federation (joining the Grid) is additive and
-// arrives in a later phase. See docs/protocol.md and docs/PLAN.md.
+// It is fully playable standalone; federation (joining the Grid) is additive.
+// See docs/protocol.md and docs/PLAN.md.
 package main
 
 import (
@@ -22,6 +22,39 @@ import (
 	"github.com/SkyPhusion/hollow-grid-go/internal/world"
 )
 
+// applyEnv fills empty flags from the container-friendly env vars (compose, k8s).
+func applyEnv(addr, name, url, data, admins, gridHubURL, gridHubToken *string) {
+	if *addr == ":8790" {
+		if v := strings.TrimSpace(os.Getenv("LISTEN_ADDR")); v != "" {
+			*addr = v
+		}
+	}
+	if *name == "Rust Choir" {
+		if v := strings.TrimSpace(os.Getenv("WORLD_NAME")); v != "" {
+			*name = v
+		}
+	}
+	if *url == "" {
+		*url = strings.TrimSpace(os.Getenv("WORLD_URL"))
+	}
+	if *data == "data" {
+		if v := strings.TrimSpace(os.Getenv("DATA_DIR")); v != "" {
+			*data = v
+		}
+	}
+	if *admins == "skyphusion" {
+		if v := strings.TrimSpace(os.Getenv("ADMINS")); v != "" {
+			*admins = v
+		}
+	}
+	if *gridHubURL == "" {
+		*gridHubURL = strings.TrimSpace(os.Getenv("GRID_HUB_URL"))
+	}
+	if *gridHubToken == "" {
+		*gridHubToken = strings.TrimSpace(os.Getenv("GRID_HUB_TOKEN"))
+	}
+}
+
 func main() {
 	addr := flag.String("addr", ":8790", "listen address")
 	name := flag.String("world-name", "Rust Choir", "world display name")
@@ -31,6 +64,7 @@ func main() {
 	gridHubURL := flag.String("grid-hub-url", "", "Grid Hub HTTP RPC URL (e.g. https://grid-hub.example/rpc); omit for standalone LocalHub")
 	gridHubToken := flag.String("grid-hub-token", "", "Bearer token for Grid Hub RPC (GRID_RPC_TOKEN)")
 	flag.Parse()
+	applyEnv(addr, name, url, data, admins, gridHubURL, gridHubToken)
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 

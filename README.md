@@ -31,14 +31,36 @@ MUD_URL=ws://localhost:8790/ws node smoke.mjs
 
 ### Docker
 
+Standalone (no Grid Hub):
+
 ```sh
 docker build -t hollow-grid-go .
 docker run -d --name hollow-grid-go -p 8790:8790 -v hollow-grid-go-data:/data hollow-grid-go
 curl localhost:8790/health
 ```
 
+Federated Rust Choir (after merge; image from GHCR):
+
+```sh
+cp .env.example .env   # set WORLD_URL, GRID_HUB_URL, GRID_HUB_TOKEN
+docker compose up -d
+curl localhost:8790/health/deep
+```
+
+Or pull the release image directly:
+
+```sh
+docker run -d --name rust-choir -p 8790:8790 \
+  -v rust-choir-data:/data \
+  -e WORLD_URL=wss://rustchoir.skyphusion.org/ws \
+  -e GRID_HUB_URL=https://grid-hub.example/rpc \
+  -e GRID_HUB_TOKEN='…' \
+  ghcr.io/skyphusion-labs/hollow-grid-go:latest
+```
+
 The image is multi-stage: a static (CGO-off) binary on `gcr.io/distroless/static`.
-`/data` is a volume for the local character store.
+`/data` is a volume for the local character store. Federation env vars are optional;
+omit them and the world runs on LocalHub until the hub is reachable.
 
 ## What's built
 
@@ -68,9 +90,13 @@ See [docs/COMMANDS.md](docs/COMMANDS.md) for the verb set and [docs/ARCHITECTURE
 | Flag | Default | Meaning |
 |---|---|---|
 | `--addr` | `:8790` | listen address |
-| `--world-name` | `The Hollow Grid (Go)` | display name |
-| `--world-url` | `""` | this world's public URL (for the federation registry, later) |
+| `--world-name` | `Rust Choir` | display name |
+| `--world-url` | `""` | this world's public URL (federation registry / travel) |
 | `--data` | `data` | directory for the local character store |
+| `--grid-hub-url` | `""` | Grid Hub HTTP RPC URL; omit for standalone LocalHub |
+| `--grid-hub-token` | `""` | bearer token for Grid Hub RPC |
+
+Container env aliases (used when the matching flag is at its default): `LISTEN_ADDR`, `WORLD_NAME`, `WORLD_URL`, `DATA_DIR`, `ADMINS`, `GRID_HUB_URL`, `GRID_HUB_TOKEN`.
 
 ## Layout
 
