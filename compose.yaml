@@ -4,8 +4,8 @@
 # Federation: set GRID_HUB_URL + GRID_HUB_TOKEN in .env (see .env.example).
 # Standalone works with those unset (LocalHub fallback).
 #
-# Fleet / mud-bots: bind 0.0.0.0:8790 and set WORLD_URL to the mesh-reachable
-# address bots use (e.g. ws://10.0.96.4:8790/ws).
+# Fleet (biafra): VLAN bind + cloudflared at rustchoir.skyphusion.org -- see
+# fleet-chezmoi system/stacks/biafra/rust-choir/.
 
 services:
   rust-choir:
