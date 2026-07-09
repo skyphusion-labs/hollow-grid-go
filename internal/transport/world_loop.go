@@ -42,11 +42,13 @@ func (s *Server) killMob(roomID string, m *world.Mob) {
 	if spawnRoom == "" {
 		spawnRoom = roomID
 	}
+	now := time.Now()
 	s.mu.Lock()
+	s.mobSlainAt[m.ID] = now.UnixMilli()
 	s.deadMobs[m.ID] = pendingRespawn{
 		templateID: m.ID,
 		roomID:     spawnRoom,
-		at:         time.Now().Add(time.Duration(respawnMs) * time.Millisecond).UnixMilli(),
+		at:         now.Add(time.Duration(respawnMs) * time.Millisecond).UnixMilli(),
 	}
 	s.mu.Unlock()
 }

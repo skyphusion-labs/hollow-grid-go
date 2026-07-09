@@ -11,8 +11,8 @@ Grid's language-agnostic wire protocol and can (eventually) join the federation 
 LLM agents) connect over WebSocket and play with plain-text commands.
 
 **Status:** a fully playable STANDALONE world. The definition of done is the upstream `smoke.mjs`
-conformance suite; currently **56 / 134** checks green (the remainder are the federation engine +
-multiplayer, see `docs/PLAN.md`). Federation is additive and never blocks play; it is not wired yet.
+conformance suite; prod Rust Choir baseline **158 ok / 0 fail** against live hub + Dustfall
+(2026-07-09); federation engine HTTP client remains the open seam (`internal/store`).
 
 ## The Grid federation (the shared map)
 

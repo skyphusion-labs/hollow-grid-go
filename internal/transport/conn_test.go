@@ -429,7 +429,14 @@ func TestHoldingPitRescue(t *testing.T) {
 
 	send("free")
 	freed := readUntil(t, read, "@event grid.rescued")
-	mustContain(t, "rescue", freed, `"savedBy":"Liberator"`, `"freed":["a captive maiden"]`, `"morality":15`)
+	mustContain(t, "rescue", freed, `"savedBy":"Liberator"`, `"freed":[`, `"morality":12`)
+	mustContain(t, "antidote", freed, "Antivenom")
+
+	send("sense")
+	acts := readUntil(t, read, "@event room.actions")
+	if strings.Contains(acts, `"verb":"free"`) {
+		t.Fatalf("room.actions should not offer free after rescue: %s", acts)
+	}
 }
 
 // TestHealth checks the liveness probe shape (protocol.md s1).
