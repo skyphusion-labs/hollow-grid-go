@@ -160,10 +160,13 @@ func (h *Hub) push(name, text string) {
 	if !ok {
 		return
 	}
-	select {
-	case lp.push <- text:
-	default:
-	}
+	deliver(lp, text)
+}
+
+// deliver enqueues outbound text for a live player. Blocks until the session
+// reads it so tell/reply and gridcasts are never dropped on a full buffer.
+func deliver(lp *livePlayer, text string) {
+	lp.push <- text
 }
 
 // BroadcastRoom sends prose to everyone in a room except skip (if non-empty).
@@ -177,10 +180,7 @@ func (h *Hub) BroadcastRoom(room, text, skip string) {
 	}
 	h.mu.RUnlock()
 	for _, lp := range targets {
-		select {
-		case lp.push <- text:
-		default:
-		}
+		deliver(lp, text)
 	}
 }
 
@@ -193,10 +193,7 @@ func (h *Hub) BroadcastAll(text string) {
 	}
 	h.mu.RUnlock()
 	for _, lp := range targets {
-		select {
-		case lp.push <- text:
-		default:
-		}
+		deliver(lp, text)
 	}
 }
 
@@ -211,9 +208,6 @@ func (h *Hub) BroadcastAllExcept(text, skip string) {
 	}
 	h.mu.RUnlock()
 	for _, lp := range targets {
-		select {
-		case lp.push <- text:
-		default:
-		}
+		deliver(lp, text)
 	}
 }
