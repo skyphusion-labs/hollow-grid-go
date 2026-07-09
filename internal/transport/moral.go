@@ -44,6 +44,7 @@ func (s *session) moralArc() {
 }
 
 func (s *session) resolveReturn(p *world.Player) {
+	p.Redeemed = true
 	if p.Title == "" {
 		p.Title = "the Returned"
 	}
@@ -86,6 +87,7 @@ func (s *session) daisPledgeFront() {
 	s.persist()
 	s.srv.hub.Sync(s.player)
 	s.srv.hub.BroadcastRoom("dais", s.player.Name+" swore themselves to the Cinder Front at the Ashmonger's dais.", s.player.Name)
+	s.moralArc()
 	s.event(event.CharAffects, s.player.Affects())
 	s.event(event.CharVitals, s.player.Vitals())
 	s.event(event.RoomActions, s.actions(s.room()))
@@ -112,6 +114,8 @@ func (s *session) daisDefect() {
 	s.srv.hub.BroadcastRoom("dais", s.player.Name+" has turned against the Cinder Front!", s.player.Name)
 	if s.player.Strayed && !s.player.Redeemed && !s.player.Ashsworn && s.player.Morality >= redeemCeil {
 		s.resolveReturn(s.player)
+	} else {
+		s.moralArc()
 	}
 	s.event(event.CharAffects, s.player.Affects())
 	s.event(event.CharVitals, s.player.Vitals())
