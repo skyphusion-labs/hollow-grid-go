@@ -81,7 +81,7 @@ A world a player (or an LLM agent) can actually live in:
 | **Economy** | the tinker's shop (`list`/`buy` gear for gold) |
 | **Dreams** | `sleep` → `char.dream`, a mirror of your own record |
 | **Persistence** | the canonical `CharSheet` saved locally (the seam the federation client will later implement against the Grid) |
-| **CI** | GitHub Actions: `go vet` + build, unit tests + the upstream E2E conformance suite. Image build + deploy are not yet automated. |
+| **CI / deploy** | GitHub Actions `release.yml`: lint, vet, test, build, push to GHCR on `main`; dispatches `fleet-chezmoi` `rust-choir-roll` to redeploy **Rust Choir** on biafra (`wss://rustchoir.skyphusion.org/ws`). Runbook: `fleet-chezmoi/system/swarm/RUNBOOK-rust-choir-roll.md`. |
 
 See [docs/COMMANDS.md](docs/COMMANDS.md) for the verb set and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design.
 

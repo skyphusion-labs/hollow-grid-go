@@ -9,8 +9,8 @@ name: release
 #   - push to GHCR (:<sha> + :latest) on push to main only
 #
 # After a green GHCR push on main, dispatches fleet-chezmoi rust-choir-roll to pull +
-# redeploy on biafra. Org secrets FLEET_DISPATCH_TOKEN + GHCR_READ_PAT are escrowed in
-# crew-secrets secrets-shared.env.age and seeded with gh secret set -o skyphusion-labs.
+# redeploy on biafra. Org secrets FLEET_DISPATCH_TOKEN + GHCR_READ_PAT (see crew-secrets
+# README; GHCR_READ_PAT escrowed in secrets-shared.env.age).
 #
 # Public repo -> GitHub-hosted ubuntu-latest (fork-safe), never the fleet pool.
 # GHCR auth uses the built-in GITHUB_TOKEN (no PAT) with
