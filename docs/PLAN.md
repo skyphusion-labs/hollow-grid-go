@@ -12,7 +12,7 @@ executable checks** on standalone (1 federation block SKIPs when `DUSTFALL_URL` 
 hub-bound on LocalHub (`gridcast`, global tide delta, `gridstats` ledger composition);
 expected until #42 federation client work binds a real hub. **Live Rust Choir** (Mackaye
 reference, bots offline, `DUSTFALL_URL` set): **135 ok / 19 fail / 0 skip** -- login
-burst + several hub-write features still red; see fc#40 comment for failure clusters.
+burst + several hub-write features still red; see #40 comment for failure clusters.
 Prior quiet-prod note (2026-07-09): **156 ok / 1 fail / 0 skip** under different
 suite revision / load conditions.
 
