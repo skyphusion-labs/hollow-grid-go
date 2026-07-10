@@ -5,7 +5,7 @@ Porting the Hollow Grid world framework to Go, against the upstream
 on a standalone run; grows with federation blocks when `DUSTFALL_URL` is up):
 **build the port to pass it, phase by phase.**
 
-**Status (2026-07-10, re-baseline fc#40):** upstream `smoke.mjs` now carries **~153
+**Status (2026-07-10, re-baseline #40):** upstream `smoke.mjs` now carries **~153
 executable checks** on standalone (1 federation block SKIPs when `DUSTFALL_URL` is down).
 **Local standalone** (`go run ./cmd/world`, LocalHub, no `GRID_HUB_URL`):
 **149 ok / 3 fail / 1 skip** (rancid, the-hollow-grid @ main). The three fails are
