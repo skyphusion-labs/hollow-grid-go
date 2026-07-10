@@ -151,6 +151,13 @@ func NewLocalHub(worldName, worldURL string) *LocalHub {
 }
 
 func (h *LocalHub) Record(_ context.Context, world, node, kind, text string, at int64) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.recordTrace(world, node, kind, text, at)
+	return nil
+}
+
+func (h *LocalHub) recordTrace(world, node, kind, text string, at int64) {
 	if at == 0 {
 		at = time.Now().UnixMilli()
 	}
@@ -158,10 +165,11 @@ func (h *LocalHub) Record(_ context.Context, world, node, kind, text string, at 
 	if len(h.traces) > 200 {
 		h.traces = h.traces[:200]
 	}
-	return nil
 }
 
 func (h *LocalHub) RecordLocal(node, kind, text string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	rows := h.local[node]
 	rows = append([]EchoTrace{{At: time.Now().UnixMilli(), Kind: kind, Text: text}}, rows...)
 	if len(rows) > 50 {
@@ -171,14 +179,18 @@ func (h *LocalHub) RecordLocal(node, kind, text string) {
 }
 
 func (h *LocalHub) LocalTraces(node string, limit int) []EchoTrace {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	rows := h.local[node]
 	if limit <= 0 || limit > len(rows) {
-		return rows
+		return append([]EchoTrace(nil), rows...)
 	}
-	return rows[:limit]
+	return append([]EchoTrace(nil), rows[:limit]...)
 }
 
 func (h *LocalHub) RecentAcross(_ context.Context, world string, limit int) ([]Trace, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	out := make([]Trace, 0, limit)
 	for _, t := range h.traces {
 		if t.World == world {
@@ -193,10 +205,12 @@ func (h *LocalHub) RecentAcross(_ context.Context, world string, limit int) ([]T
 }
 
 func (h *LocalHub) AllTraces(limit int) []Trace {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if limit <= 0 || limit > len(h.traces) {
-		return h.traces
+		return append([]Trace(nil), h.traces...)
 	}
-	return h.traces[:limit]
+	return append([]Trace(nil), h.traces[:limit]...)
 }
 
 func (h *LocalHub) Tide(context.Context) (int, error) {
@@ -229,17 +243,21 @@ func (h *LocalHub) LoadCharacter(context.Context, string) (CharSheet, bool, erro
 func (h *LocalHub) CommitCharacter(context.Context, string, CharSheet) error { return nil }
 
 func (h *LocalHub) Register(_ context.Context, world, url string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	for i, t := range h.traces {
 		if t.World == world {
 			h.traces[i].Node = url
 			return nil
 		}
 	}
-	h.traces = append([]Trace{{World: world, Node: url, Kind: "register", Text: "a new node joined the network.", At: time.Now().UnixMilli()}}, h.traces...)
+	h.recordTrace(world, url, "register", "a new node joined the network.", time.Now().UnixMilli())
 	return nil
 }
 
 func (h *LocalHub) ListWorlds(context.Context) ([]WorldInfo, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	now := time.Now().UnixMilli()
 	return []WorldInfo{
 		{ID: "Saltreach", URL: "wss://saltreach.example/ws", LastSeen: 0},
@@ -255,6 +273,8 @@ func (h *LocalHub) ReportPresence(context.Context, string, []PresenceEntry, int6
 func (h *LocalHub) Presence(context.Context, int64) ([]Presence, error) { return nil, nil }
 
 func (h *LocalHub) RecordRescued(_ context.Context, world, name, savedBy string, at int64) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if at == 0 {
 		at = time.Now().UnixMilli()
 	}
@@ -262,17 +282,22 @@ func (h *LocalHub) RecordRescued(_ context.Context, world, name, savedBy string,
 	if len(h.rescued) > 200 {
 		h.rescued = h.rescued[:200]
 	}
-	return h.Record(context.Background(), world, "rescued", "rescue", name+" freed by "+savedBy, at)
+	h.recordTrace(world, "rescued", "rescue", name+" freed by "+savedBy, at)
+	return nil
 }
 
 func (h *LocalHub) RecentRescued(_ context.Context, limit int) ([]Rescued, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if limit <= 0 || limit > len(h.rescued) {
-		return h.rescued, nil
+		return append([]Rescued(nil), h.rescued...), nil
 	}
-	return h.rescued[:limit], nil
+	return append([]Rescued(nil), h.rescued[:limit]...), nil
 }
 
 func (h *LocalHub) RecordFallen(_ context.Context, world, name, room string, at int64) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if at == 0 {
 		at = time.Now().UnixMilli()
 	}
@@ -284,13 +309,15 @@ func (h *LocalHub) RecordFallen(_ context.Context, world, name, room string, at 
 }
 
 func (h *LocalHub) RecentFallen(_ context.Context, limit int) ([]Fallen, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if len(h.fallen) == 0 {
 		return []Fallen{}, nil
 	}
 	if limit <= 0 || limit > len(h.fallen) {
-		return h.fallen, nil
+		return append([]Fallen(nil), h.fallen...), nil
 	}
-	return h.fallen[:limit], nil
+	return append([]Fallen(nil), h.fallen[:limit]...), nil
 }
 
 func (h *LocalHub) Remote() bool { return false }

@@ -97,9 +97,9 @@ func (s *session) cmdGridprune() {
 		s.line("Only a keeper of the Grid can tend its deep memory.")
 		return
 	}
-	ctx, cancel := hubCtx()
-	defer cancel()
-	before, err := s.srv.grid.LedgerStats(ctx)
+	beforeCtx, beforeCancel := hubCtx()
+	before, err := s.srv.grid.LedgerStats(beforeCtx)
+	beforeCancel()
 	if err != nil {
 		s.line("The hub is unreachable; the deep memory cannot be tended.")
 		return
@@ -108,12 +108,16 @@ func (s *session) cmdGridprune() {
 	for _, r := range before {
 		beforeTotal += r.Count
 	}
-	removed, err := s.srv.grid.PruneLedgerKinds(ctx, ambientLedgerKinds)
+	pruneCtx, pruneCancel := hubCtx()
+	removed, err := s.srv.grid.PruneLedgerKinds(pruneCtx, ambientLedgerKinds)
+	pruneCancel()
 	if err != nil {
 		s.line("The hub is unreachable; the deep memory cannot be tended.")
 		return
 	}
-	after, err := s.srv.grid.LedgerStats(ctx)
+	afterCtx, afterCancel := hubCtx()
+	after, err := s.srv.grid.LedgerStats(afterCtx)
+	afterCancel()
 	if err != nil {
 		s.line("The hub is unreachable; the deep memory cannot be tended.")
 		return
