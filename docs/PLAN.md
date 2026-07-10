@@ -1,15 +1,20 @@
 # Build plan & status
 
 Porting the Hollow Grid world framework to Go, against the upstream
-`docs/protocol.md`. The scoreboard is the upstream `smoke.mjs` (**135 checks**):
+`docs/protocol.md`. The scoreboard is the upstream `smoke.mjs` (**~153 checks**
+on a standalone run; grows with federation blocks when `DUSTFALL_URL` is up):
 **build the port to pass it, phase by phase.**
 
-**Status (2026-07-09 evening, handoff):** TS world **command parity is done** and
-live on Rust Choir (`main` @ `d6d0459`). Quiet prod smoke (mud-bots offline,
-`SMOKE_SLOW=2`): **156 ok / 1 fail / 0 skip**. The remaining fail is the
-holding-pit warden **grace-window** check (combat / respawn variance; same family
-as the historical 1-skip baseline on slow boxes). Under bot load, tell/reply and
-tide checks can flake; re-run quiet when diagnosing server regressions.
+**Status (2026-07-10, re-baseline fc#40):** upstream `smoke.mjs` now carries **~153
+executable checks** on standalone (1 federation block SKIPs when `DUSTFALL_URL` is down).
+**Local standalone** (`go run ./cmd/world`, LocalHub, no `GRID_HUB_URL`):
+**149 ok / 3 fail / 1 skip** (rancid, the-hollow-grid @ main). The three fails are
+hub-bound on LocalHub (`gridcast`, global tide delta, `gridstats` ledger composition);
+expected until #42 federation client work binds a real hub. **Live Rust Choir** (Mackaye
+reference, bots offline, `DUSTFALL_URL` set): **135 ok / 19 fail / 0 skip** -- login
+burst + several hub-write features still red; see fc#40 comment for failure clusters.
+Prior quiet-prod note (2026-07-09): **156 ok / 1 fail / 0 skip** under different
+suite revision / load conditions.
 
 ## Done
 
@@ -66,7 +71,19 @@ Both merged + GHCR `latest` + `rust-choir-roll` to biafra. New transport files:
 - [ ] **Warden grace flake** -- tighten or SKIP the post-respawn `free` check more
   cleanly when combat variance wins (upstream smoke concern).
 
-## Deferred -- hub-side / trust (upstream)
+## Phase 3 -- federation client (schedulable; #42)
+
+Grid Hub HTTP ingress is **live** at `https://grid-hub.skyphusion.org/rpc`.
+hollow-grid-py already federates against it (worked example; CF User-Agent gotcha
+fixed in hollow-grid-py#6). Rust Choir uses the same pattern via
+`internal/grid/RemoteHub` when `GRID_HUB_URL` is set.
+
+Remaining Go-port work is **#42** (federation client hardening): tick loop survives
+hub failure (`finally`-reschedule), 2s timeout cap on hub polls, structured events on
+cross-fighter state changes (requirements from the-hollow-grid PR #55 / v0.29.9).
+Test the blackholed-hub path, not only the happy path.
+
+## Deferred -- hub-side trust only (upstream)
 
 The Grid Hub **server** (authoritative D1 + GridHub DO) lives in `the-hollow-grid`.
 Trust hardening (per-world keys, leased progression deltas, commit validation) is
