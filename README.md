@@ -12,7 +12,7 @@ node when `GRID_HUB_URL` is set.
 > of a choice is legible as data, not buried in prose. This port keeps that intact.
 
 - **Upstream contract:** [`the-hollow-grid/docs/protocol.md`](https://github.com/SkyPhusion/the-hollow-grid/blob/main/docs/protocol.md) -- the wire spec is deliberately language-agnostic; a Go world is a first-class citizen of the same Grid.
-- **Definition of done:** the upstream `smoke.mjs` conformance suite (**135 checks**). Prod **Rust Choir** baseline (2026-07-09): **158 ok / 0 fail / 1 skip** against live hub + Dustfall (`DUSTFALL_URL` set); the skip is the holding-pit warden grace wall-clock wait on slow CI boxes.
+- **Definition of done:** the upstream `smoke.mjs` conformance suite (**135 checks**). Quiet prod **Rust Choir** scoreboard (2026-07-09 evening, hub + Dustfall, bots offline): **156 ok / 1 fail / 0 skip**; the remaining fail is holding-pit warden grace / combat variance (same family as the older slow-box skip).
 - **Status:** fully playable **standalone** (LocalHub fallback) or **federated** (HTTP Grid Hub client in `internal/grid`). Live fleet deployment: **`wss://rustchoir.skyphusion.org/ws`**.
 
 ## Play now (Rust Choir)
@@ -89,8 +89,8 @@ A world a player (or an LLM agent) can actually live in:
 | **Health** | `/health` (liveness) + `/health/deep` (per-dependency) probes; `/map.svg` world map |
 | **The world** | the canonical opening map plus the wastes, the data-leech zone, and the Cinder Front stronghold endgame; Rust Choir grafts the **Grid Gate** tract east from the tunnels (see `docs/WORLD.md`) |
 | **Races** | the 7 canonical races, each with a Cinder Front *stance* and a signature cooldown ability |
-| **Items** | inventory, equipment (`wield`/`remove` → `char.equipment`), economy (`list`/`buy`/`sell`/`steal`) |
-| **Combat** | `attack <mob>` → async tick-resolved fights on the `combat.*` channel, death → respawn |
+| **Items** | inventory, equipment (`wield`/`remove` → `char.equipment`), ground loot (`get`/`drop`/`use`/`examine`), economy (`list`/`buy`/`sell`/`steal`) |
+| **Combat** | `attack` / `flee` → async tick-resolved fights on the `combat.*` channel; stolen-kill sync; loot + XP on kill; death → respawn |
 | **Multiplayer** | session registry, `tell`/`reply`/`yell`/`emote`, `room.info.players` with standing |
 | **The living world** | a heartbeat clock (`world.state` phase/weather), `rest` + HP regen -- the world turns on its own |
 | **The moral arc** | the Cinder Front recruiter; `join`/`defend`/`defy`; ash-sworn (kapo) brand; redemption (Returned); rescue on `grid.rescued` |

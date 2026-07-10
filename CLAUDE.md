@@ -10,10 +10,12 @@ this is a from-scratch port of the **world half** -- a single autonomous game wo
 Grid's language-agnostic wire protocol and can (eventually) join the federation as a node. Players (or
 LLM agents) connect over WebSocket and play with plain-text commands.
 
-**Status:** a fully playable world, standalone or federated. The definition of done
-is the upstream `smoke.mjs` conformance suite (**135 checks**); prod Rust Choir
-baseline **158 ok / 0 fail / 1 skip** against live hub + Dustfall (2026-07-09).
-Live at `wss://rustchoir.skyphusion.org/ws`.
+**Status:** a fully playable world, standalone or federated, with TS command-list
+parity (ground loot, flee, consumables, stolen-kill sync, …). The definition of
+done is the upstream `smoke.mjs` conformance suite (**135 checks**). Quiet prod
+baseline (2026-07-09 evening, bots offline): **156 ok / 1 fail / 0 skip** (the
+fail is holding-pit warden grace / combat variance). Live at
+`wss://rustchoir.skyphusion.org/ws`. See `docs/PLAN.md` for the handoff.
 
 ## The Grid federation (the shared map)
 
