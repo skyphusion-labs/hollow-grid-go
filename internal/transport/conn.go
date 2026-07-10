@@ -198,12 +198,18 @@ const worldHeartbeat = 2 * time.Second
 // onTick runs one living-world beat for this session.
 func (s *session) onTick() {
 	s.event(event.WorldState, s.w.State())
+	s.srv.combatMu.Lock()
+	inCombat := s.player.Target != nil
+	poisoned := s.player.Poisoned
+	resting := s.player.Position == "resting"
+	s.srv.combatMu.Unlock()
+
 	switch {
-	case s.player.Target != nil:
+	case inCombat:
 		s.combatRound()
-	case s.player.Poisoned:
+	case poisoned:
 		s.poisonTick()
-	case s.player.Position == "resting":
+	case resting:
 		s.regen()
 	}
 }
