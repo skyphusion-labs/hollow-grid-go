@@ -271,9 +271,9 @@ func (s *session) cmdWall(arg string) {
 	}
 	banner := "*** GRID BROADCAST ***  " + msg
 	ev, _ := event.Line(event.ServerAnnounce, map[string]string{"from": s.player.Name, "text": msg})
-	for _, lp := range s.srv.hub.All() {
+	for _, name := range s.srv.hub.PlayerNames() {
 		text := banner + crlf
-		s.srv.hub.PushReliable(lp.name, text+ev+crlf)
+		s.srv.hub.PushReliable(name, text+ev+crlf)
 	}
 }
 

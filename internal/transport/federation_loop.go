@@ -116,13 +116,14 @@ func (s *Server) reportPresence(ctx context.Context) {
 			s.log.Warn("reportPresence recovered", "panic", r)
 		}
 	}()
-	if len(s.hub.All()) == 0 {
+	if !s.hub.HasPlayers() {
 		return
 	}
-	entries := make([]grid.PresenceEntry, 0, 8)
-	for _, lp := range s.hub.All() {
+	snaps := s.hub.PresenceSnapshots()
+	entries := make([]grid.PresenceEntry, 0, len(snaps))
+	for _, snap := range snaps {
 		entries = append(entries, grid.PresenceEntry{
-			Name: lp.name, Regard: brandLive(lp), Title: lp.title,
+			Name: snap.name, Regard: snap.regard, Title: snap.title,
 		})
 	}
 	_ = s.grid.ReportPresence(ctx, s.world.Name, entries, time.Now().UnixMilli())

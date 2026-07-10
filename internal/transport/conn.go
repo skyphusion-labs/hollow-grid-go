@@ -1095,15 +1095,15 @@ func (s *session) cmdPing(arg string) {
 func (s *session) cmdWho() {
 	players := make([]map[string]any, 0, 8)
 	seen := map[string]bool{}
-	for _, lp := range s.srv.hub.All() {
+	for _, snap := range s.srv.hub.PresenceSnapshots() {
 		players = append(players, map[string]any{
 			"world":  s.w.Name,
-			"name":   lp.name,
-			"regard": brandLive(lp),
+			"name":   snap.name,
+			"regard": snap.regard,
 			"here":   true,
-			"title":  lp.title,
+			"title":  snap.title,
 		})
-		seen[strings.ToLower(lp.name)] = true
+		seen[strings.ToLower(snap.name)] = true
 	}
 	if s.srv.grid.Remote() {
 		hubCall, hubCancel := hubCtx()
@@ -1184,15 +1184,15 @@ func (s *session) cmdYell(arg string) {
 		s.line("Yell what?  (yell <message>)")
 		return
 	}
-	for _, lp := range s.srv.hub.All() {
+	for _, name := range s.srv.hub.PlayerNames() {
 		var text string
-		if lp.name == s.player.Name {
+		if name == s.player.Name {
 			text = "You yell, \"" + msg + "\"" + crlf
 		} else {
 			text = s.player.Name + " yells, \"" + msg + "\"" + crlf
 		}
 		yellEv, _ := event.Line(event.CommYell, map[string]string{"from": s.player.Name, "text": msg})
-		s.srv.hub.PushReliable(lp.name, text+yellEv+crlf)
+		s.srv.hub.PushReliable(name, text+yellEv+crlf)
 	}
 }
 

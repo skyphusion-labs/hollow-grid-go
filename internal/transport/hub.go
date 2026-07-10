@@ -122,13 +122,40 @@ func (h *Hub) PlayersInRoom(room, except string) []world.PlayerRef {
 	return out
 }
 
-// All returns every connected player snapshot for who/presence.
-func (h *Hub) All() []*livePlayer {
+// presenceSnap is a point-in-time copy of hub fields used for who/presence.
+type presenceSnap struct {
+	name   string
+	title  string
+	regard string
+}
+
+// HasPlayers reports whether any sessions are registered.
+func (h *Hub) HasPlayers() bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	out := make([]*livePlayer, 0, len(h.players))
+	return len(h.players) > 0
+}
+
+// PlayerNames returns connected player names (snapshot under hub lock).
+func (h *Hub) PlayerNames() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]string, 0, len(h.players))
+	for name := range h.players {
+		out = append(out, name)
+	}
+	return out
+}
+
+// PresenceSnapshots returns who/presence fields copied under hub lock.
+func (h *Hub) PresenceSnapshots() []presenceSnap {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]presenceSnap, 0, len(h.players))
 	for _, lp := range h.players {
-		out = append(out, lp)
+		out = append(out, presenceSnap{
+			name: lp.name, title: lp.title, regard: brandLive(lp),
+		})
 	}
 	return out
 }
