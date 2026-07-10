@@ -198,12 +198,18 @@ const worldHeartbeat = 2 * time.Second
 // onTick runs one living-world beat for this session.
 func (s *session) onTick() {
 	s.event(event.WorldState, s.w.State())
+	s.srv.combatMu.Lock()
+	inCombat := s.player.Target != nil
+	poisoned := s.player.Poisoned
+	resting := s.player.Position == "resting"
+	s.srv.combatMu.Unlock()
+
 	switch {
-	case s.player.Target != nil:
+	case inCombat:
 		s.combatRound()
-	case s.player.Poisoned:
+	case poisoned:
 		s.poisonTick()
-	case s.player.Position == "resting":
+	case resting:
 		s.regen()
 	}
 }
@@ -992,7 +998,8 @@ func mobNames(r *world.Room) []string {
 }
 
 func (s *session) recordTrace(node, kind, text string) {
-	ctx := context.Background()
+	ctx, cancel := hubCtx()
+	defer cancel()
 	now := time.Now().UnixMilli()
 	_ = s.srv.grid.Record(ctx, s.w.Name, node, kind, text, now)
 	s.srv.recordLocalTrace(node, kind, text)
@@ -1027,8 +1034,10 @@ func (s *session) cmdListen() {
 		if lh, ok := s.srv.grid.(*grid.LocalHub); ok {
 			feed = lh.AllTraces(20)
 		} else {
+			hubCall, hubCancel := hubCtx()
 			var err error
-			feed, err = s.srv.grid.RecentAcross(context.Background(), s.w.Name, 20)
+			feed, err = s.srv.grid.RecentAcross(hubCall, s.w.Name, 20)
+			hubCancel()
 			if err != nil {
 				feed = nil
 			}
@@ -1047,7 +1056,9 @@ func (s *session) cmdListen() {
 func (s *session) cmdPing(arg string) {
 	a := strings.ToLower(strings.TrimSpace(arg))
 	if a == "all" || a == "deep" || a == "grid" {
-		feed, err := s.srv.grid.RecentAcross(context.Background(), s.w.Name, 8)
+		hubCtx, hubCancel := hubCtx()
+		feed, err := s.srv.grid.RecentAcross(hubCtx, s.w.Name, 8)
+		hubCancel()
 		if err != nil || len(feed) == 0 {
 			s.line("The deep Grid hums, vast and empty. Nothing echoes back from the other nodes -- yet.")
 			s.event(event.GridFederation, map[string]any{"traces": []grid.Trace{}})
@@ -1084,18 +1095,20 @@ func (s *session) cmdPing(arg string) {
 func (s *session) cmdWho() {
 	players := make([]map[string]any, 0, 8)
 	seen := map[string]bool{}
-	for _, lp := range s.srv.hub.All() {
+	for _, snap := range s.srv.hub.PresenceSnapshots() {
 		players = append(players, map[string]any{
 			"world":  s.w.Name,
-			"name":   lp.name,
-			"regard": brandLive(lp),
+			"name":   snap.name,
+			"regard": snap.regard,
 			"here":   true,
-			"title":  lp.title,
+			"title":  snap.title,
 		})
-		seen[strings.ToLower(lp.name)] = true
+		seen[strings.ToLower(snap.name)] = true
 	}
 	if s.srv.grid.Remote() {
-		remote, err := s.srv.grid.Presence(context.Background(), 60_000)
+		hubCall, hubCancel := hubCtx()
+		remote, err := s.srv.grid.Presence(hubCall, 60_000)
+		hubCancel()
 		if err == nil {
 			for _, p := range remote {
 				key := strings.ToLower(p.Name)
@@ -1171,15 +1184,15 @@ func (s *session) cmdYell(arg string) {
 		s.line("Yell what?  (yell <message>)")
 		return
 	}
-	for _, lp := range s.srv.hub.All() {
+	for _, name := range s.srv.hub.PlayerNames() {
 		var text string
-		if lp.name == s.player.Name {
+		if name == s.player.Name {
 			text = "You yell, \"" + msg + "\"" + crlf
 		} else {
 			text = s.player.Name + " yells, \"" + msg + "\"" + crlf
 		}
 		yellEv, _ := event.Line(event.CommYell, map[string]string{"from": s.player.Name, "text": msg})
-		s.srv.hub.PushReliable(lp.name, text+yellEv+crlf)
+		s.srv.hub.PushReliable(name, text+yellEv+crlf)
 	}
 }
 

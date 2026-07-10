@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"strings"
 
 	"github.com/SkyPhusion/hollow-grid-go/internal/event"
@@ -124,7 +123,9 @@ func (s *session) daisDefect() {
 
 func (s *session) cmdWitness(arg string) {
 	who := strings.TrimSpace(arg)
-	fallen, err := s.srv.grid.RecentFallen(context.Background(), 12)
+	ctx, cancel := hubCtx()
+	defer cancel()
+	fallen, err := s.srv.grid.RecentFallen(ctx, 12)
 	if err != nil {
 		s.line("The Grid is silent; its memory of the fallen is out of reach.")
 		s.event(event.GridFallen, map[string]any{"fallen": []grid.Fallen{}})

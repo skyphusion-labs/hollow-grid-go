@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -9,7 +8,9 @@ import (
 )
 
 func (s *session) cmdWar() {
-	tide, err := s.srv.grid.Tide(context.Background())
+	ctx, cancel := hubCtx()
+	defer cancel()
+	tide, err := s.srv.grid.Tide(ctx)
 	if err != nil {
 		s.line("The deep Grid is silent; you can't read the war from here.")
 		return
@@ -59,7 +60,9 @@ func (s *session) cmdGridcast(arg string) {
 		s.line("Gridcast what? (gridcast <message> -- the dead network carries it to every world)")
 		return
 	}
-	if err := s.srv.grid.GridCast(context.Background(), s.w.Name, s.player.Name, msg); err != nil {
+	ctx, cancel := hubCtx()
+	defer cancel()
+	if err := s.srv.grid.GridCast(ctx, s.w.Name, s.player.Name, msg); err != nil {
 		s.line("The Grid swallows your words; the network is unreachable.")
 		return
 	}
@@ -71,7 +74,9 @@ func (s *session) cmdGridstats() {
 		s.line("Only a keeper of the Grid can read its deep memory.")
 		return
 	}
-	stats, err := s.srv.grid.LedgerStats(context.Background())
+	ctx, cancel := hubCtx()
+	defer cancel()
+	stats, err := s.srv.grid.LedgerStats(ctx)
 	if err != nil {
 		s.line("The hub is unreachable; the deep memory cannot be read.")
 		return
@@ -92,7 +97,9 @@ func (s *session) cmdGridprune() {
 		s.line("Only a keeper of the Grid can tend its deep memory.")
 		return
 	}
-	before, err := s.srv.grid.LedgerStats(context.Background())
+	beforeCtx, beforeCancel := hubCtx()
+	before, err := s.srv.grid.LedgerStats(beforeCtx)
+	beforeCancel()
 	if err != nil {
 		s.line("The hub is unreachable; the deep memory cannot be tended.")
 		return
@@ -101,12 +108,16 @@ func (s *session) cmdGridprune() {
 	for _, r := range before {
 		beforeTotal += r.Count
 	}
-	removed, err := s.srv.grid.PruneLedgerKinds(context.Background(), ambientLedgerKinds)
+	pruneCtx, pruneCancel := hubCtx()
+	removed, err := s.srv.grid.PruneLedgerKinds(pruneCtx, ambientLedgerKinds)
+	pruneCancel()
 	if err != nil {
 		s.line("The hub is unreachable; the deep memory cannot be tended.")
 		return
 	}
-	after, err := s.srv.grid.LedgerStats(context.Background())
+	afterCtx, afterCancel := hubCtx()
+	after, err := s.srv.grid.LedgerStats(afterCtx)
+	afterCancel()
 	if err != nil {
 		s.line("The hub is unreachable; the deep memory cannot be tended.")
 		return
@@ -127,7 +138,10 @@ func (s *session) cmdWhoami() {
 	localMorality := s.player.Morality
 	localTitle := s.player.Title
 	if s.srv.grid.Remote() {
-		if canon, _, err := s.srv.grid.LoadCharacter(context.Background(), s.player.Name); err == nil {
+		ctx, cancel := hubCtx()
+		canon, _, err := s.srv.grid.LoadCharacter(ctx, s.player.Name)
+		cancel()
+		if err == nil {
 			applyHubSheet(s.player, canon)
 			// Session-local standing wins over a stale hub read (commit is best-effort).
 			if localFaction == "ally" || localFaction == "front" {
@@ -151,17 +165,21 @@ func (s *session) mergeHubOnLogin() {
 	if !s.srv.grid.Remote() {
 		return
 	}
-	canon, _, err := s.srv.grid.LoadCharacter(context.Background(), s.player.Name)
+	ctx, cancel := hubCtx()
+	defer cancel()
+	canon, _, err := s.srv.grid.LoadCharacter(ctx, s.player.Name)
 	if err != nil {
 		return
 	}
 	applyHubSheet(s.player, canon)
 	go func() {
+		regCtx, regCancel := hubCtx()
+		defer regCancel()
 		url := s.w.URL
 		if url == "" {
 			url = "ws://localhost:8790/ws"
 		}
-		_ = s.srv.grid.Register(context.Background(), s.w.Name, url)
+		_ = s.srv.grid.Register(regCtx, s.w.Name, url)
 	}()
 }
 
@@ -169,5 +187,7 @@ func (s *session) commitHub() {
 	if !s.srv.grid.Remote() || s.player == nil {
 		return
 	}
-	_ = s.srv.grid.CommitCharacter(context.Background(), s.player.Name, hubSheet(s.player))
+	ctx, cancel := hubCtx()
+	defer cancel()
+	_ = s.srv.grid.CommitCharacter(ctx, s.player.Name, hubSheet(s.player))
 }

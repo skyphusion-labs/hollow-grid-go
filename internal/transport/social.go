@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -272,9 +271,9 @@ func (s *session) cmdWall(arg string) {
 	}
 	banner := "*** GRID BROADCAST ***  " + msg
 	ev, _ := event.Line(event.ServerAnnounce, map[string]string{"from": s.player.Name, "text": msg})
-	for _, lp := range s.srv.hub.All() {
+	for _, name := range s.srv.hub.PlayerNames() {
 		text := banner + crlf
-		s.srv.hub.PushReliable(lp.name, text+ev+crlf)
+		s.srv.hub.PushReliable(name, text+ev+crlf)
 	}
 }
 
@@ -396,7 +395,9 @@ func (s *session) cmdTreat() {
 		s.line("The waystation medic looks at your brand and turns their back. There is no care to be had here for your kind.")
 		return
 	}
-	tide, _ := s.srv.tide(context.Background())
+	ctx, cancel := hubCtx()
+	defer cancel()
+	tide, _ := s.srv.tide(ctx)
 	mood := world.MoodForTide(tide)
 	if mood == world.MoodFalling {
 		s.line("The triage cot is empty, the tarp flapping. With the Front ascendant, the medic has gone to ground -- or worse. There's no care to be had here today. Turn the tide, and they'll come back.")

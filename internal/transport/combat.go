@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -51,7 +50,9 @@ func (s *session) combatRound() {
 		s.finishMobKill(m)
 	case s.player.HP <= 0:
 		s.player.Target = nil
-		_ = s.srv.grid.RecordFallen(context.Background(), s.w.Name, s.player.Name, s.player.RoomID, time.Now().UnixMilli())
+		hubCall, hubCancel := hubCtx()
+		defer hubCancel()
+		_ = s.srv.grid.RecordFallen(hubCall, s.w.Name, s.player.Name, s.player.RoomID, time.Now().UnixMilli())
 		s.player.HP = s.player.MaxHP
 		s.player.RoomID = s.w.Start().ID
 		s.player.Poisoned = false

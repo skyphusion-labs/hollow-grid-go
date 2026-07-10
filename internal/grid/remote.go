@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // RemoteHub calls a Grid Hub over HTTP JSON-RPC (POST /rpc). Federation never
@@ -25,7 +24,7 @@ func NewRemoteHub(hubURL, token string) *RemoteHub {
 		url:   strings.TrimRight(strings.TrimSpace(hubURL), "/"),
 		token: strings.TrimSpace(token),
 		client: &http.Client{
-			Timeout: 8 * time.Second,
+			Timeout: HubRPCTimeout,
 		},
 	}
 }
@@ -53,6 +52,7 @@ func (h *RemoteHub) call(ctx context.Context, method string, params []any, out a
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "hollow-grid-go/0.1.0")
 	if h.token != "" {
 		req.Header.Set("Authorization", "Bearer "+h.token)
 	}

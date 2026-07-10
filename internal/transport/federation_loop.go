@@ -26,24 +26,42 @@ func (s *Server) RunFederation(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				s.pollGridcasts(ctx)
-				s.reportPresence(ctx)
-				if t, err := s.grid.Tide(ctx); err == nil {
-					s.mu.Lock()
-					s.lastTide = t
-					s.mu.Unlock()
-				}
+				s.federationTick()
 			}
 		}
 	}()
 }
 
+func (s *Server) federationTick() {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Warn("federation tick recovered", "panic", r)
+		}
+	}()
+	tickCtx, cancel := grid.WithHubTimeout(context.Background())
+	defer cancel()
+	s.pollGridcasts(tickCtx)
+	s.reportPresence(tickCtx)
+	if t, err := s.grid.Tide(tickCtx); err == nil {
+		s.mu.Lock()
+		s.lastTide = t
+		s.mu.Unlock()
+	}
+}
+
 func (s *Server) registerWorld(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Warn("grid register recovered", "panic", r)
+		}
+	}()
+	regCtx, cancel := grid.WithHubTimeout(ctx)
+	defer cancel()
 	url := s.world.URL
 	if url == "" {
 		url = "ws://localhost:8790/ws"
 	}
-	if err := s.grid.Register(ctx, s.world.Name, url); err != nil {
+	if err := s.grid.Register(regCtx, s.world.Name, url); err != nil {
 		s.log.Warn("grid register failed", "world", s.world.Name, "err", err)
 	} else {
 		s.log.Info("registered on the Grid", "world", s.world.Name, "url", url)
@@ -52,13 +70,20 @@ func (s *Server) registerWorld(ctx context.Context) {
 
 func (s *Server) contributeTide(delta int) {
 	go func() {
-		if _, err := s.grid.ShiftTide(context.Background(), delta); err != nil {
+		ctx, cancel := hubCtx()
+		defer cancel()
+		if _, err := s.grid.ShiftTide(ctx, delta); err != nil {
 			s.log.Debug("shiftTide failed", "delta", delta, "err", err)
 		}
 	}()
 }
 
 func (s *Server) pollGridcasts(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Warn("pollGridcasts recovered", "panic", r)
+		}
+	}()
 	s.mu.Lock()
 	since := s.lastCast
 	s.mu.Unlock()
@@ -86,13 +111,19 @@ func (s *Server) pollGridcasts(ctx context.Context) {
 }
 
 func (s *Server) reportPresence(ctx context.Context) {
-	if len(s.hub.All()) == 0 {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Warn("reportPresence recovered", "panic", r)
+		}
+	}()
+	if !s.hub.HasPlayers() {
 		return
 	}
-	entries := make([]grid.PresenceEntry, 0, 8)
-	for _, lp := range s.hub.All() {
+	snaps := s.hub.PresenceSnapshots()
+	entries := make([]grid.PresenceEntry, 0, len(snaps))
+	for _, snap := range snaps {
 		entries = append(entries, grid.PresenceEntry{
-			Name: lp.name, Regard: brandLive(lp), Title: lp.title,
+			Name: snap.name, Regard: snap.regard, Title: snap.title,
 		})
 	}
 	_ = s.grid.ReportPresence(ctx, s.world.Name, entries, time.Now().UnixMilli())
