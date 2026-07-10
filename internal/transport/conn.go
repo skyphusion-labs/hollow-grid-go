@@ -992,7 +992,8 @@ func mobNames(r *world.Room) []string {
 }
 
 func (s *session) recordTrace(node, kind, text string) {
-	ctx := context.Background()
+	ctx, cancel := hubCtx()
+	defer cancel()
 	now := time.Now().UnixMilli()
 	_ = s.srv.grid.Record(ctx, s.w.Name, node, kind, text, now)
 	s.srv.recordLocalTrace(node, kind, text)
@@ -1027,8 +1028,10 @@ func (s *session) cmdListen() {
 		if lh, ok := s.srv.grid.(*grid.LocalHub); ok {
 			feed = lh.AllTraces(20)
 		} else {
+			hubCall, hubCancel := hubCtx()
 			var err error
-			feed, err = s.srv.grid.RecentAcross(context.Background(), s.w.Name, 20)
+			feed, err = s.srv.grid.RecentAcross(hubCall, s.w.Name, 20)
+			hubCancel()
 			if err != nil {
 				feed = nil
 			}
@@ -1047,7 +1050,9 @@ func (s *session) cmdListen() {
 func (s *session) cmdPing(arg string) {
 	a := strings.ToLower(strings.TrimSpace(arg))
 	if a == "all" || a == "deep" || a == "grid" {
-		feed, err := s.srv.grid.RecentAcross(context.Background(), s.w.Name, 8)
+		hubCtx, hubCancel := hubCtx()
+		feed, err := s.srv.grid.RecentAcross(hubCtx, s.w.Name, 8)
+		hubCancel()
 		if err != nil || len(feed) == 0 {
 			s.line("The deep Grid hums, vast and empty. Nothing echoes back from the other nodes -- yet.")
 			s.event(event.GridFederation, map[string]any{"traces": []grid.Trace{}})
@@ -1095,7 +1100,9 @@ func (s *session) cmdWho() {
 		seen[strings.ToLower(lp.name)] = true
 	}
 	if s.srv.grid.Remote() {
-		remote, err := s.srv.grid.Presence(context.Background(), 60_000)
+		hubCall, hubCancel := hubCtx()
+		remote, err := s.srv.grid.Presence(hubCall, 60_000)
+		hubCancel()
 		if err == nil {
 			for _, p := range remote {
 				key := strings.ToLower(p.Name)

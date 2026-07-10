@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"strings"
 	"time"
 
@@ -10,7 +9,9 @@ import (
 )
 
 func (s *session) cmdWorlds() {
-	worlds, err := s.srv.grid.ListWorlds(context.Background())
+	ctx, cancel := hubCtx()
+	defer cancel()
+	worlds, err := s.srv.grid.ListWorlds(ctx)
 	if err != nil {
 		s.line("The Grid is silent; the registry is out of reach.")
 		return
@@ -53,7 +54,9 @@ func (s *session) cmdTravel(arg string) bool {
 		s.line("You can't key out through the Grid in the middle of a fight.")
 		return false
 	}
-	worlds, err := s.srv.grid.ListWorlds(context.Background())
+	ctx, cancel := hubCtx()
+	defer cancel()
+	worlds, err := s.srv.grid.ListWorlds(ctx)
 	if err != nil {
 		s.line("The Grid won't answer; travel is impossible right now.")
 		return false

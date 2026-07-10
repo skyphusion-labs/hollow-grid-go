@@ -5,6 +5,8 @@ package grid
 
 import (
 	"context"
+	"sort"
+	"sync"
 	"time"
 )
 
@@ -121,12 +123,16 @@ type PresenceEntry struct {
 // LocalHub is the standalone fallback: seeded federation echoes and an in-process
 // ledger so ping/listen work without the Cloudflare hub binding.
 type LocalHub struct {
-	worldName string
-	worldURL  string
-	traces    []Trace
-	local     map[string][]EchoTrace
-	rescued   []Rescued
-	fallen    []Fallen
+	mu         sync.Mutex
+	worldName  string
+	worldURL   string
+	traces     []Trace
+	local      map[string][]EchoTrace
+	rescued    []Rescued
+	fallen     []Fallen
+	tide       int
+	casts      []Cast
+	nextCastID int
 }
 
 // NewLocalHub builds a hub that satisfies federation-shaped calls offline.
@@ -193,9 +199,28 @@ func (h *LocalHub) AllTraces(limit int) []Trace {
 	return h.traces[:limit]
 }
 
-func (h *LocalHub) Tide(context.Context) (int, error) { return 0, nil }
+func (h *LocalHub) Tide(context.Context) (int, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.tide, nil
+}
 
-func (h *LocalHub) ShiftTide(_ context.Context, delta int) (int, error) { return delta, nil }
+func (h *LocalHub) ShiftTide(_ context.Context, delta int) (int, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.tide = clampTide(h.tide + delta)
+	return h.tide, nil
+}
+
+func clampTide(n int) int {
+	if n < -100 {
+		return -100
+	}
+	if n > 100 {
+		return 100
+	}
+	return n
+}
 
 func (h *LocalHub) LoadCharacter(context.Context, string) (CharSheet, bool, error) {
 	return CharSheet{}, false, nil
@@ -270,11 +295,43 @@ func (h *LocalHub) RecentFallen(_ context.Context, limit int) ([]Fallen, error) 
 
 func (h *LocalHub) Remote() bool { return false }
 
-func (h *LocalHub) GridCast(context.Context, string, string, string) error { return nil }
+func (h *LocalHub) GridCast(_ context.Context, world, sender, text string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.nextCastID++
+	h.casts = append(h.casts, Cast{ID: h.nextCastID, World: world, Sender: sender, Text: text})
+	return nil
+}
 
-func (h *LocalHub) CastsSince(context.Context, int, int) ([]Cast, error) { return nil, nil }
+func (h *LocalHub) CastsSince(_ context.Context, sinceID, limit int) ([]Cast, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]Cast, 0, len(h.casts))
+	for _, c := range h.casts {
+		if c.ID > sinceID {
+			out = append(out, c)
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
 
-func (h *LocalHub) LedgerStats(context.Context) ([]LedgerKind, error) { return nil, nil }
+func (h *LocalHub) LedgerStats(context.Context) ([]LedgerKind, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	counts := map[string]int{}
+	for _, t := range h.traces {
+		counts[t.Kind]++
+	}
+	out := make([]LedgerKind, 0, len(counts))
+	for kind, count := range counts {
+		out = append(out, LedgerKind{Kind: kind, Count: count})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Kind < out[j].Kind })
+	return out, nil
+}
 
 func (h *LocalHub) PruneLedgerKinds(context.Context, []string) (PruneResult, error) {
 	return PruneResult{}, nil

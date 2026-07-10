@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -36,7 +35,8 @@ func nameList(names []string) string {
 func (s *session) emitRescued(freed []string) {
 	payload := world.GridRescuedPayload{SavedBy: s.player.Name, Freed: freed}
 	s.event(event.GridRescued, payload)
-	ctx := context.Background()
+	ctx, cancel := hubCtx()
+	defer cancel()
 	now := time.Now().UnixMilli()
 	for _, name := range freed {
 		_ = s.srv.grid.RecordRescued(ctx, s.w.Name, name, s.player.Name, now)
@@ -110,7 +110,9 @@ func (s *session) cmdShelter() {
 }
 
 func (s *session) cmdSaved() {
-	roll, err := s.srv.grid.RecentRescued(context.Background(), 12)
+	ctx, cancel := hubCtx()
+	defer cancel()
+	roll, err := s.srv.grid.RecentRescued(ctx, 12)
 	if err != nil {
 		s.line("The Grid is silent; its roll of the rescued is out of reach.")
 		return
