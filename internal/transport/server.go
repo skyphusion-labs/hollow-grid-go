@@ -198,14 +198,25 @@ func (s *Server) persistPlayer(p *world.Player) {
 	_ = s.store.Commit(p.Name, p.Sheet())
 }
 
-// Handler returns the world's HTTP handler (/ws, /health, /health/deep).
+// Handler returns the world's HTTP handler (/ws, /health, /health/deep, /map.svg, play page).
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /health/deep", s.healthDeep)
 	mux.HandleFunc("GET /map.svg", s.mapSVG)
 	mux.HandleFunc("/ws", s.ws)
+	mux.HandleFunc("/", s.playPage)
 	return mux
+}
+
+// playPage serves the browser xterm client for any unmatched GET (TS parity).
+func (s *Server) playPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(playPage(s.world.Name)))
 }
 
 // Wait blocks until all in-flight player sessions have ended. Pair it with the
