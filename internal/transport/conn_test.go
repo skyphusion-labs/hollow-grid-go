@@ -77,7 +77,9 @@ func TestLoginRaceMoveAndScene(t *testing.T) {
 
 	mustContain(t, "name prompt", read(), "wanderer")
 	send("Tester")
-	mustContain(t, "race menu", read(), "choose what you are", "Human", "Revenant")
+	raceMenu := read()
+	mustContain(t, "race menu", raceMenu, "choose what you are", "Human", "Revenant",
+		`@event char.create`, `"prompt":"race"`, `"Human"`, `"Elf"`, `"Revenant"`, `"Ghoul"`, `"Chromed"`, `"Dustkin"`, `"Vatborn"`)
 
 	send("human")
 	entry := read()
@@ -91,6 +93,27 @@ func TestLoginRaceMoveAndScene(t *testing.T) {
 
 	send("down")
 	mustContain(t, "tunnels", read(), `"id":"tunnels"`, "Service Tunnels")
+}
+
+// TestChooseRaceReemitsCharCreate: an invalid answer re-shows the menu and re-emits char.create.
+func TestChooseRaceReemitsCharCreate(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	read()
+	send("Picker")
+	first := read()
+	mustContain(t, "first menu", first, `@event char.create`, `"prompt":"race"`)
+
+	send("not-a-race")
+	retry := read()
+	mustContain(t, "retry menu", retry, "does not recognize", `@event char.create`, `"prompt":"race"`)
+	if strings.Count(retry, `@event char.create`) != 1 {
+		t.Fatalf("expected one char.create on retry, got: %q", retry)
+	}
+
+	send("elf")
+	mustContain(t, "spawn", read(), "The Cracked Nexus", `"race":"elf"`)
 }
 
 // TestResumePersistsTheCharacter: a returning name resumes its persisted sheet,

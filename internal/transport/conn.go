@@ -255,6 +255,16 @@ func resumeLine(p *world.Player) string {
 	}
 }
 
+// sendRaceCreate emits char.create whenever the creation race menu is shown.
+// Display names are protocol; menu prose may diverge per world (the-hollow-grid#63).
+func (s *session) sendRaceCreate() {
+	names := make([]string, len(world.Races))
+	for i, r := range world.Races {
+		names[i] = r.Name
+	}
+	s.event(event.CharCreate, map[string]any{"races": names, "prompt": "race"})
+}
+
 // chooseRace shows the race menu and reads a valid choice, looping on a bad one.
 func (s *session) chooseRace(ctx context.Context) (world.Race, bool) {
 	for {
@@ -264,6 +274,7 @@ func (s *session) chooseRace(ctx context.Context) (world.Race, bool) {
 			s.line(fmt.Sprintf("  %d) %s -- %s", i+1, r.Name, r.Blurb))
 		}
 		s.line("Answer with a number or a name.")
+		s.sendRaceCreate()
 		if err := s.flush(ctx); err != nil {
 			return world.Race{}, false
 		}
