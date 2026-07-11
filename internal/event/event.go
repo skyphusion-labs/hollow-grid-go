@@ -24,6 +24,7 @@ const (
 	RoomActions      = "room.actions"
 	CharVitals       = "char.vitals"
 	CharAffects      = "char.affects"
+	CharCreate       = "char.create"
 	CharEquipment    = "char.equipment"
 	CharIdentity     = "char.identity"
 	CharDream        = "char.dream"
