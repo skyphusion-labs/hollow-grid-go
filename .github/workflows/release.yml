@@ -6,9 +6,9 @@ name: release
 #   - docker build on every push/PR (build errors surface early)
 #   - smoke conformance suite after build -- informational, non-blocking while
 #     the port is in progress (a partial pass never reds the build)
-#   - push to GHCR (:<sha> + :latest) on push to main only
+#   - push to GHCR (:<sha> + :latest) on a pushed version tag (v*) only
 #
-# After a green GHCR push on main, dispatches fleet-chezmoi rust-choir-roll to pull +
+# After a green GHCR push on a version tag, dispatches fleet-chezmoi rust-choir-roll to pull +
 # redeploy on biafra. Org secrets FLEET_DISPATCH_TOKEN + GHCR_READ_PAT (see crew-secrets
 # README; GHCR_READ_PAT escrowed in secrets-shared.env.age).
 #
@@ -20,6 +20,7 @@ name: release
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 permissions:
@@ -85,19 +86,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Log in to GHCR (main only)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      - name: Log in to GHCR (tag only)
+        if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Push to GHCR (main only)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      - name: Push to GHCR (tag only)
+        if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
         run: |
           docker push "$IMAGE:${GITHUB_SHA}"
           docker push "$IMAGE:latest"
           echo "Pushed hollow-grid-go:${GITHUB_SHA}."
 
-      - name: Dispatch rust-choir roll to fleet-chezmoi (main only)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      - name: Dispatch rust-choir roll to fleet-chezmoi (tag only)
+        if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
         env:
           FLEET_DISPATCH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
         run: bash .github/scripts/dispatch-fleet-rust-choir-roll.sh
