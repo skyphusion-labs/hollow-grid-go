@@ -75,9 +75,16 @@ jobs:
           grep -h -v "^mode:" unit.out smoke.out >> coverage.out || true
           test -s coverage.out
 
+      - name: Convert coverage to Cobertura XML
+        run: |
+          go install github.com/t-yuki/gocover-cobertura@latest
+          "$(go env GOPATH)/bin/gocover-cobertura" < coverage.out > coverage.xml
+          test -s coverage.xml
+
       - name: Upload coverage report
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/upload-code-coverage@v1
         with:
-          file: ./coverage.out
+          file: ./coverage.xml
           language: go
+          label: code-coverage/go
