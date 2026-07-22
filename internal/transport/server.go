@@ -5,6 +5,7 @@ package transport
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -81,7 +82,7 @@ func (s *Server) verifyAdminToken(token string) bool {
 	if s.adminToken == "" {
 		return false
 	}
-	return strings.TrimSpace(token) == s.adminToken
+	return subtle.ConstantTimeCompare([]byte(strings.TrimSpace(token)), []byte(s.adminToken)) == 1
 }
 
 // tide reads the collective war tide, caching the last good value when the hub
