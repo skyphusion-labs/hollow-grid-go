@@ -215,21 +215,21 @@ func maxHPFor(level, hpMod int) int {
 // Player is a connected character. The canonical fields round-trip via CharSheet;
 // HP, room, and position are local/transient and never shared.
 type Player struct {
-	Name     string
-	Race     string
-	RoomID   string
-	HP       int
-	MaxHP    int
-	Level    int
-	XP       int
-	Gold     int
-	Morality int
-	Faction  string
-	Title    string
-	Ashsworn bool
-	Strayed  bool
-	Redeemed bool
-	Resisted bool
+	Name       string
+	Race       string
+	RoomID     string
+	HP         int
+	MaxHP      int
+	Level      int
+	XP         int
+	Gold       int
+	Morality   int
+	Faction    string
+	Title      string
+	Ashsworn   bool
+	Strayed    bool
+	Redeemed   bool
+	Resisted   bool
 	secretHash string
 	// Local state (never federated): the pack and what is worn. See items.go.
 	Inventory []string
