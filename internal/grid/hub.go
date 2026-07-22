@@ -98,6 +98,7 @@ type Hub interface {
 	ShiftTide(ctx context.Context, delta int) (int, error)
 	LoadCharacter(ctx context.Context, name string) (CharSheet, bool, error)
 	CommitCharacter(ctx context.Context, name string, sheet CharSheet) error
+	ClaimCharacterLease(ctx context.Context, name string) error
 	Register(ctx context.Context, world, url string) error
 	ListWorlds(ctx context.Context) ([]WorldInfo, error)
 	GridCast(ctx context.Context, world, sender, text string) error
@@ -241,6 +242,8 @@ func (h *LocalHub) LoadCharacter(context.Context, string) (CharSheet, bool, erro
 }
 
 func (h *LocalHub) CommitCharacter(context.Context, string, CharSheet) error { return nil }
+
+func (h *LocalHub) ClaimCharacterLease(context.Context, string) error { return nil }
 
 func (h *LocalHub) Register(_ context.Context, world, url string) error {
 	h.mu.Lock()

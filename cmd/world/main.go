@@ -23,7 +23,7 @@ import (
 )
 
 // applyEnv fills empty flags from the container-friendly env vars (compose, k8s).
-func applyEnv(addr, name, url, data, admins, adminToken, gridHubURL, gridHubToken *string) {
+func applyEnv(addr, name, url, data, admins, adminToken, gridHubURL, gridHubToken, gridWorldKey *string) {
 	if *addr == ":8790" {
 		if v := strings.TrimSpace(os.Getenv("LISTEN_ADDR")); v != "" {
 			*addr = v
@@ -56,6 +56,9 @@ func applyEnv(addr, name, url, data, admins, adminToken, gridHubURL, gridHubToke
 	if *adminToken == "" {
 		*adminToken = strings.TrimSpace(os.Getenv("ADMIN_TOKEN"))
 	}
+	if *gridWorldKey == "" {
+		*gridWorldKey = strings.TrimSpace(os.Getenv("GRID_WORLD_KEY"))
+	}
 }
 
 func main() {
@@ -67,8 +70,9 @@ func main() {
 	adminToken := flag.String("admin-token", "", "shared secret required to log in as a keeper name (ADMIN_TOKEN)")
 	gridHubURL := flag.String("grid-hub-url", "", "Grid Hub HTTP RPC URL (e.g. https://grid-hub.example/rpc); omit for standalone LocalHub")
 	gridHubToken := flag.String("grid-hub-token", "", "Bearer token for Grid Hub RPC (GRID_RPC_TOKEN)")
+	gridWorldKey := flag.String("grid-world-key", "", "Per-world key for mutating Grid Hub RPC (GRID_WORLD_KEY)")
 	flag.Parse()
-	applyEnv(addr, name, url, data, admins, adminToken, gridHubURL, gridHubToken)
+	applyEnv(addr, name, url, data, admins, adminToken, gridHubURL, gridHubToken, gridWorldKey)
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
@@ -87,7 +91,7 @@ func main() {
 	}
 	var gh grid.Hub
 	if strings.TrimSpace(*gridHubURL) != "" {
-		gh = grid.NewRemoteHub(*gridHubURL, *gridHubToken)
+		gh = grid.NewRemoteHub(*gridHubURL, *gridHubToken, *name, *gridWorldKey)
 		log.Info("federation enabled", "grid_hub", *gridHubURL)
 	}
 	srv := transport.NewServer(w, st, gh, adminList, *adminToken, log)
