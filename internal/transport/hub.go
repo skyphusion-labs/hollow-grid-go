@@ -8,6 +8,10 @@ import (
 	"github.com/SkyPhusion/hollow-grid-go/internal/world"
 )
 
+func canonicalPlayerName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
 // livePlayer is one connected character tracked for multiplayer presence.
 type livePlayer struct {
 	name     string
@@ -28,16 +32,41 @@ type livePlayer struct {
 type Hub struct {
 	mu      sync.RWMutex
 	players map[string]*livePlayer
+	pending map[string]struct{}
 }
 
 // NewHub builds an empty session registry.
 func NewHub() *Hub {
-	return &Hub{players: map[string]*livePlayer{}}
+	return &Hub{players: map[string]*livePlayer{}, pending: map[string]struct{}{}}
+}
+
+// TryReserve holds a name during login before Register.
+func (h *Hub) TryReserve(name string) bool {
+	key := canonicalPlayerName(name)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.players[key]; ok {
+		return false
+	}
+	if _, ok := h.pending[key]; ok {
+		return false
+	}
+	h.pending[key] = struct{}{}
+	return true
+}
+
+// Release drops a login reservation when auth fails before Register.
+func (h *Hub) Release(name string) {
+	key := canonicalPlayerName(name)
+	h.mu.Lock()
+	delete(h.pending, key)
+	h.mu.Unlock()
 }
 
 // Register adds a player and returns their outbound push channel.
 // Returns nil,false when the name is already connected elsewhere on this world.
 func (h *Hub) Register(p *world.Player) (chan string, bool) {
+	key := canonicalPlayerName(p.Name)
 	ch := make(chan string, 256)
 	lp := &livePlayer{
 		name: p.Name, room: p.RoomID, title: p.Title,
@@ -47,24 +76,27 @@ func (h *Hub) Register(p *world.Player) (chan string, bool) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if _, ok := h.players[p.Name]; ok {
+	delete(h.pending, key)
+	if _, ok := h.players[key]; ok {
 		return nil, false
 	}
-	h.players[p.Name] = lp
+	h.players[key] = lp
 	return ch, true
 }
 
 // Unregister removes a player from the registry.
 func (h *Hub) Unregister(name string) {
+	key := canonicalPlayerName(name)
 	h.mu.Lock()
-	delete(h.players, name)
+	delete(h.players, key)
 	h.mu.Unlock()
 }
 
 // Sync updates cached fields used for presence/branding after local changes.
 func (h *Hub) Sync(p *world.Player) {
+	key := canonicalPlayerName(p.Name)
 	h.mu.Lock()
-	if lp, ok := h.players[p.Name]; ok {
+	if lp, ok := h.players[key]; ok {
 		lp.room = p.RoomID
 		lp.title = p.Title
 		lp.faction = p.Faction
@@ -79,8 +111,9 @@ func (h *Hub) Sync(p *world.Player) {
 
 // SetReplyTo remembers who last told this player (for reply).
 func (h *Hub) SetReplyTo(name, from string) {
+	key := canonicalPlayerName(name)
 	h.mu.Lock()
-	if lp, ok := h.players[name]; ok {
+	if lp, ok := h.players[key]; ok {
 		lp.replyTo = from
 	}
 	h.mu.Unlock()
@@ -88,9 +121,10 @@ func (h *Hub) SetReplyTo(name, from string) {
 
 // ReplyTo returns the last private messenger, if any.
 func (h *Hub) ReplyTo(name string) string {
+	key := canonicalPlayerName(name)
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	if lp, ok := h.players[name]; ok {
+	if lp, ok := h.players[key]; ok {
 		return lp.replyTo
 	}
 	return ""
@@ -98,30 +132,24 @@ func (h *Hub) ReplyTo(name string) string {
 
 // Find returns a live player by name (case-insensitive).
 func (h *Hub) Find(name string) (*livePlayer, bool) {
+	key := canonicalPlayerName(name)
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	if lp, ok := h.players[name]; ok {
-		return lp, true
-	}
-	lower := strings.ToLower(strings.TrimSpace(name))
-	for n, lp := range h.players {
-		if strings.ToLower(n) == lower {
-			return lp, true
-		}
-	}
-	return nil, false
+	lp, ok := h.players[key]
+	return lp, ok
 }
 
 // PlayersInRoom lists others in the same room for room.info.
 func (h *Hub) PlayersInRoom(room, except string) []world.PlayerRef {
+	exceptKey := canonicalPlayerName(except)
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	out := make([]world.PlayerRef, 0, 4)
-	for name, lp := range h.players {
-		if name == except || lp.room != room {
+	for key, lp := range h.players {
+		if key == exceptKey || lp.room != room {
 			continue
 		}
-		out = append(out, world.PlayerRef{Name: name, Standing: brandLive(lp)})
+		out = append(out, world.PlayerRef{Name: lp.name, Standing: brandLive(lp)})
 	}
 	return out
 }
@@ -186,9 +214,7 @@ func (h *Hub) FindPrefix(prefix string) (*livePlayer, bool) {
 }
 
 func (h *Hub) push(name, text string) {
-	h.mu.RLock()
-	lp, ok := h.players[name]
-	h.mu.RUnlock()
+	lp, ok := h.Find(name)
 	if !ok {
 		return
 	}
@@ -198,9 +224,7 @@ func (h *Hub) push(name, text string) {
 // PushReliable retries until the session reads the message or times out.
 // Used for tell/reply so private comms are not dropped on a full buffer.
 func (h *Hub) PushReliable(name, text string) {
-	h.mu.RLock()
-	lp, ok := h.players[name]
-	h.mu.RUnlock()
+	lp, ok := h.Find(name)
 	if !ok {
 		return
 	}
@@ -235,10 +259,11 @@ func pushBestEffort(lp *livePlayer, text string) {
 // PushReliableRoom sends prose to everyone in a room except skip, retrying until
 // each session reads it or times out (used for emotes and other room-visible comms).
 func (h *Hub) PushReliableRoom(room, text, skip string) {
+	skipKey := canonicalPlayerName(skip)
 	h.mu.RLock()
 	targets := make([]*livePlayer, 0, 4)
-	for name, lp := range h.players {
-		if lp.room == room && name != skip {
+	for key, lp := range h.players {
+		if lp.room == room && key != skipKey {
 			targets = append(targets, lp)
 		}
 	}
@@ -250,10 +275,11 @@ func (h *Hub) PushReliableRoom(room, text, skip string) {
 
 // BroadcastRoom sends prose to everyone in a room except skip (if non-empty).
 func (h *Hub) BroadcastRoom(room, text, skip string) {
+	skipKey := canonicalPlayerName(skip)
 	h.mu.RLock()
 	targets := make([]*livePlayer, 0, 4)
-	for name, lp := range h.players {
-		if lp.room == room && name != skip {
+	for key, lp := range h.players {
+		if lp.room == room && key != skipKey {
 			targets = append(targets, lp)
 		}
 	}
@@ -278,10 +304,11 @@ func (h *Hub) BroadcastAll(text string) {
 
 // BroadcastAllExcept sends prose to every player except skip.
 func (h *Hub) BroadcastAllExcept(text, skip string) {
+	skipKey := canonicalPlayerName(skip)
 	h.mu.RLock()
 	targets := make([]*livePlayer, 0, len(h.players))
-	for name, lp := range h.players {
-		if name != skip {
+	for key, lp := range h.players {
+		if key != skipKey {
 			targets = append(targets, lp)
 		}
 	}

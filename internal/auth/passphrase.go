@@ -31,5 +31,9 @@ func VerifyPassphrase(phrase, hash string) bool {
 	if hash == "" {
 		return false
 	}
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(strings.TrimSpace(phrase))) == nil
+	phrase = strings.TrimSpace(phrase)
+	if len(phrase) > maxPassphraseLen {
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(phrase)) == nil
 }

@@ -110,6 +110,21 @@ func handleConn(ctx context.Context, c *websocket.Conn, srv *Server) {
 		return
 	}
 
+	if !s.srv.hub.TryReserve(name) {
+		s.line("")
+		s.line("That name is already awake on the Grid elsewhere. Wait, or choose another path.")
+		if err := s.flush(ctx); err != nil {
+			return
+		}
+		return
+	}
+	registered := false
+	defer func() {
+		if !registered {
+			s.srv.hub.Release(name)
+		}
+	}()
+
 	if s.srv.isAdmin(name) {
 		s.line("The Grid remembers keepers. Speak the keeper's token:")
 		if err := s.flush(ctx); err != nil {
@@ -163,6 +178,7 @@ func handleConn(ctx context.Context, c *websocket.Conn, srv *Server) {
 		}
 		return
 	}
+	registered = true
 
 	s.mergeHubOnLogin()
 
