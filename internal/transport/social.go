@@ -191,7 +191,12 @@ func (s *session) cmdLookPlayer(arg string) bool {
 }
 
 func (s *session) cmdForgive(arg string) {
-	who := strings.Fields(strings.TrimSpace(arg))[0]
+	fields := strings.Fields(strings.TrimSpace(arg))
+	if len(fields) == 0 {
+		s.line("Forgive whom?  (forgive <player> -- choose to let someone marked back in)")
+		return
+	}
+	who := fields[0]
 	if who == "" {
 		s.line("Forgive whom?  (forgive <player> -- choose to let someone marked back in)")
 		return

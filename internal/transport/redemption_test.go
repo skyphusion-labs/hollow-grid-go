@@ -10,11 +10,7 @@ func TestDaisRedemptionArc(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Redeemer")
-	read() // race menu
-	send("human")
-	read() // entry scene
+	loginNewCharacter(t, read, send, "Redeemer", "human")
 
 	for _, dir := range []string{"east", "up", "north", "north", "north", "north", "north", "up"} {
 		send(dir)

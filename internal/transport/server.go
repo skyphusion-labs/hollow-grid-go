@@ -28,6 +28,7 @@ type Server struct {
 	log         *slog.Logger
 	conns       sync.WaitGroup
 	admins      map[string]bool
+	adminToken  string
 	caches      map[string]int              // room id -> gold left for strangers
 	localTraces map[string][]grid.EchoTrace // room id -> node memory for grid.echo
 	forgiven    map[forgivenPair]bool
@@ -49,7 +50,8 @@ type keptPair struct{ keeper, fallen string }
 type forgivenPair struct{ forgiver, subject string }
 
 // NewServer builds a transport server for the given world and character store.
-func NewServer(w *world.World, st store.CharStore, gh grid.Hub, admins []string, log *slog.Logger) *Server {
+// adminToken is required when a player logs in with a name listed in admins.
+func NewServer(w *world.World, st store.CharStore, gh grid.Hub, admins []string, adminToken string, log *slog.Logger) *Server {
 	if gh == nil {
 		gh = grid.NewLocalHub(w.Name, w.URL)
 	}
@@ -62,7 +64,7 @@ func NewServer(w *world.World, st store.CharStore, gh grid.Hub, admins []string,
 	}
 	return &Server{
 		world: w, store: st, grid: gh, hub: NewHub(), log: log,
-		admins: adm, caches: map[string]int{}, localTraces: map[string][]grid.EchoTrace{},
+		admins: adm, adminToken: strings.TrimSpace(adminToken), caches: map[string]int{}, localTraces: map[string][]grid.EchoTrace{},
 		forgiven: map[forgivenPair]bool{},
 		cages:    map[string]int64{}, saved: map[string][]string{},
 		deeds: map[string]map[string]int{}, kept: map[keptPair]bool{},
@@ -73,6 +75,13 @@ func NewServer(w *world.World, st store.CharStore, gh grid.Hub, admins []string,
 
 func (s *Server) isAdmin(name string) bool {
 	return s.admins[strings.ToLower(name)]
+}
+
+func (s *Server) verifyAdminToken(token string) bool {
+	if s.adminToken == "" {
+		return false
+	}
+	return strings.TrimSpace(token) == s.adminToken
 }
 
 // tide reads the collective war tide, caching the last good value when the hub

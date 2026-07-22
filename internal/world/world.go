@@ -126,6 +126,8 @@ type CharSheet struct {
 	Strayed  bool   `json:"strayed"`
 	Redeemed bool   `json:"redeemed"`
 	Resisted bool   `json:"resisted"`
+	// SecretHash is a bcrypt hash of the player's secret phrase (login proof).
+	SecretHash string `json:"secretHash,omitempty"`
 }
 
 // CharReckoningPayload is emitted as char.reckoning: the moral self-model mirror.
@@ -213,21 +215,22 @@ func maxHPFor(level, hpMod int) int {
 // Player is a connected character. The canonical fields round-trip via CharSheet;
 // HP, room, and position are local/transient and never shared.
 type Player struct {
-	Name     string
-	Race     string
-	RoomID   string
-	HP       int
-	MaxHP    int
-	Level    int
-	XP       int
-	Gold     int
-	Morality int
-	Faction  string
-	Title    string
-	Ashsworn bool
-	Strayed  bool
-	Redeemed bool
-	Resisted bool
+	Name       string
+	Race       string
+	RoomID     string
+	HP         int
+	MaxHP      int
+	Level      int
+	XP         int
+	Gold       int
+	Morality   int
+	Faction    string
+	Title      string
+	Ashsworn   bool
+	Strayed    bool
+	Redeemed   bool
+	Resisted   bool
+	secretHash string
 	// Local state (never federated): the pack and what is worn. See items.go.
 	Inventory []string
 	Equipment map[string]string // slot -> item id
@@ -270,10 +273,16 @@ func NewPlayerFromSheet(name string, s CharSheet, startRoom string) *Player {
 		Level: level, XP: s.XP, Gold: s.Gold,
 		Morality: s.Morality, Faction: faction, Title: s.Title, Ashsworn: s.Ashsworn,
 		Strayed: s.Strayed, Redeemed: s.Redeemed, Resisted: s.Resisted,
+		secretHash: s.SecretHash,
 		// Inventory is world-local and not federated; a returning character wakes
 		// with the starter again (local item persistence is a later concern).
 		Inventory: []string{Starter}, Equipment: map[string]string{},
 	}
+}
+
+// SetPlayerSecretHash stores the bcrypt hash used to resume this character.
+func SetPlayerSecretHash(p *Player, hash string) {
+	p.secretHash = hash
 }
 
 // Sheet renders the player's canonical CharSheet.
@@ -282,6 +291,7 @@ func (p *Player) Sheet() CharSheet {
 		Level: p.Level, XP: p.XP, Gold: p.Gold, Faction: p.Faction,
 		Morality: p.Morality, Title: p.Title, Race: p.Race, Ashsworn: p.Ashsworn,
 		Strayed: p.Strayed, Redeemed: p.Redeemed, Resisted: p.Resisted,
+		SecretHash: p.secretHash,
 	}
 }
 

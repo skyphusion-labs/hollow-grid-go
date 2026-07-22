@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/SkyPhusion/hollow-grid-go/internal/auth"
 	"github.com/SkyPhusion/hollow-grid-go/internal/event"
 	"github.com/SkyPhusion/hollow-grid-go/internal/grid"
 	"github.com/SkyPhusion/hollow-grid-go/internal/store"
@@ -109,6 +110,21 @@ func handleConn(ctx context.Context, c *websocket.Conn, srv *Server) {
 		return
 	}
 
+	if s.srv.isAdmin(name) {
+		s.line("The Grid remembers keepers. Speak the keeper's token:")
+		if err := s.flush(ctx); err != nil {
+			return
+		}
+		tok, err := s.read(ctx)
+		if err != nil || !s.srv.verifyAdminToken(tok) {
+			s.line("The Grid does not recognize you as keeper.")
+			if err := s.flush(ctx); err != nil {
+				return
+			}
+			return
+		}
+	}
+
 	// Name-based identity (protocol.md s1): a known name resumes its CharSheet
 	// and skips the race menu; a new name chooses a race once.
 	if sheet, found, lerr := s.store.Load(name); lerr != nil {
@@ -119,7 +135,16 @@ func handleConn(ctx context.Context, c *websocket.Conn, srv *Server) {
 			return
 		}
 	} else if found {
+		oldHash := sheet.SecretHash
+		hash, ok := s.authenticatePassphrase(ctx, sheet.SecretHash)
+		if !ok {
+			return
+		}
+		sheet.SecretHash = hash
 		s.player = world.NewPlayerFromSheet(name, sheet, s.w.Start().ID)
+		if oldHash == "" {
+			s.persist()
+		}
 		s.log.Info("player resumed", "name", name, "race", s.player.Race, "world", s.w.Name)
 		s.line("")
 		s.line("Welcome back to the wastes, " + name + ". (Type 'help' if you need a refresher.) " + resumeLine(s.player))
@@ -129,9 +154,19 @@ func handleConn(ctx context.Context, c *websocket.Conn, srv *Server) {
 		}
 	}
 
+	push, ok := s.srv.hub.Register(s.player)
+	if !ok {
+		s.line("")
+		s.line("That name is already awake on the Grid elsewhere. Wait, or choose another path.")
+		if err := s.flush(ctx); err != nil {
+			return
+		}
+		return
+	}
+
 	s.mergeHubOnLogin()
 
-	s.push = s.srv.hub.Register(s.player)
+	s.push = push
 	defer s.srv.hub.Unregister(name)
 	s.srv.hub.BroadcastRoom(s.player.RoomID, s.player.Name+" steps out of the haze.", name)
 
@@ -235,12 +270,55 @@ func (s *session) makeNew(ctx context.Context, name string) bool {
 	if !ok {
 		return false
 	}
+	hash, ok := s.authenticatePassphrase(ctx, "")
+	if !ok {
+		return false
+	}
 	s.player = world.NewPlayer(name, race, s.w.Start().ID)
+	world.SetPlayerSecretHash(s.player, hash)
 	s.log.Info("player created", "name", name, "race", race.ID, "world", s.w.Name)
 	s.persist()
 	s.line("")
 	s.line("The Grid takes your name and your shape, " + race.Name + ". Type 'help' if you need a refresher; it is watching what you choose.")
 	return true
+}
+
+// authenticatePassphrase prompts for a secret phrase. An empty storedHash sets a
+// new hash (new character or legacy migration); otherwise the phrase is verified.
+func (s *session) authenticatePassphrase(ctx context.Context, storedHash string) (string, bool) {
+	if storedHash == "" {
+		s.line("")
+		s.line("Choose a secret phrase only you will know. The Grid will ask for it when you return.")
+	} else {
+		s.line("")
+		s.line("By what secret phrase do you prove yourself?")
+	}
+	if err := s.flush(ctx); err != nil {
+		return "", false
+	}
+	phrase, err := s.read(ctx)
+	if err != nil || phrase == "" {
+		return "", false
+	}
+	if storedHash == "" {
+		hash, err := auth.HashPassphrase(phrase)
+		if err != nil {
+			s.line("That phrase will not do. Choose one at least eight characters long.")
+			if err := s.flush(ctx); err != nil {
+				return "", false
+			}
+			return "", false
+		}
+		return hash, true
+	}
+	if !auth.VerifyPassphrase(phrase, storedHash) {
+		s.line("The Grid does not recognize that phrase for this name.")
+		if err := s.flush(ctx); err != nil {
+			return "", false
+		}
+		return "", false
+	}
+	return storedHash, true
 }
 
 // resumeLine is a short acknowledgement of who a returning character has become.

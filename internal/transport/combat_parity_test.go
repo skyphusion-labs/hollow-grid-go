@@ -11,11 +11,7 @@ func TestFleeEndsCombat(t *testing.T) {
 	read, send, done := dial(t, ts)
 	defer done()
 
-	read()
-	send("Fleer")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Fleer", "human")
 
 	send("down")
 	read()
@@ -34,11 +30,7 @@ func TestGetDropGroundItem(t *testing.T) {
 	read, send, done := dial(t, ts)
 	defer done()
 
-	read()
-	send("Picker")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Picker", "human")
 
 	send("drop shiv")
 	out := read()
@@ -57,17 +49,9 @@ func TestStolenKillDisplacesFighter(t *testing.T) {
 	bRead, bSend, bDone := dial(t, ts)
 	defer bDone()
 
-	aRead()
-	aSend("Alpha")
-	aRead()
-	aSend("human")
-	aRead()
+	loginNewCharacter(t, aRead, aSend, "Alpha", "human")
 
-	bRead()
-	bSend("Beta")
-	bRead()
-	bSend("human")
-	bRead()
+	loginNewCharacter(t, bRead, bSend, "Beta", "human")
 
 	aSend("down")
 	aRead()

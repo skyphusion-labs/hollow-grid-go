@@ -19,7 +19,7 @@ func TestWardenCleared(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := world.New("test", "")
-	srv := NewServer(w, st, nil, nil, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	srv := NewServer(w, st, nil, nil, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	pit := w.Room("holding_pit")
 
 	if srv.wardenCleared() {
@@ -57,7 +57,7 @@ func TestWardenGraceRescueAfterRespawn(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := world.New("test", "")
-	srv := NewServer(w, st, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := NewServer(w, st, nil, nil, "", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(func() {
 		ts.Close()
@@ -67,11 +67,7 @@ func TestWardenGraceRescueAfterRespawn(t *testing.T) {
 	read, send, done := dial(t, ts)
 	defer done()
 
-	read()
-	send("Liberator")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Liberator", "human")
 
 	send("north")
 	read()
