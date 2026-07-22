@@ -16,6 +16,9 @@ import (
 	"github.com/SkyPhusion/hollow-grid-go/internal/world"
 )
 
+const testAdminToken = "test-keeper-token"
+const testPassphrase = "grid-secret-phrase"
+
 // newWorldServer stands up a world with a fresh temp-dir character store.
 func newWorldServer(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -23,7 +26,7 @@ func newWorldServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
-	srv := NewServer(world.New("Test World", ""), st, nil, []string{"skyphusion"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := NewServer(world.New("Test World", ""), st, nil, []string{"skyphusion"}, testAdminToken, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(srv.Handler())
 	// Drain in-flight sessions (and their final persists) before temp-dir cleanup.
 	t.Cleanup(func() {
@@ -68,6 +71,37 @@ func mustContain(t *testing.T, where, got string, wants ...string) {
 	}
 }
 
+func loginNameAndPassphrase(t *testing.T, read func() string, send func(string), name string) {
+	t.Helper()
+	mustContain(t, "name prompt", read(), "wanderer")
+	send(name)
+	if strings.EqualFold(name, "skyphusion") {
+		mustContain(t, "keeper token", read(), "keeper's token")
+		send(testAdminToken)
+	}
+}
+
+func loginNewCharacter(t *testing.T, read func() string, send func(string), name, race string) string {
+	t.Helper()
+	loginNameAndPassphrase(t, read, send, name)
+	raceMenu := read()
+	mustContain(t, "race menu", raceMenu, "choose what you are")
+	send(race)
+	mustContain(t, "passphrase", read(), "secret phrase")
+	send(testPassphrase)
+	return read()
+}
+
+func loginResume(t *testing.T, read func() string, send func(string), name string) string {
+	t.Helper()
+	loginNameAndPassphrase(t, read, send, name)
+	mustContain(t, "passphrase", read(), "secret phrase")
+	send(testPassphrase)
+	out := read()
+	mustContain(t, "resume", out, "Welcome back")
+	return out
+}
+
 // TestLoginRaceMoveAndScene drives the canonical login: name -> race menu ->
 // the Cracked Nexus, with the full perception frame and world.state, then a
 // move down into the service tunnels (protocol.md s1+s2, reference content).
@@ -75,14 +109,7 @@ func TestLoginRaceMoveAndScene(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	mustContain(t, "name prompt", read(), "wanderer")
-	send("Tester")
-	raceMenu := read()
-	mustContain(t, "race menu", raceMenu, "choose what you are", "Human", "Revenant",
-		`@event char.create`, `"prompt":"race"`, `"Human"`, `"Elf"`, `"Revenant"`, `"Ghoul"`, `"Chromed"`, `"Dustkin"`, `"Vatborn"`)
-
-	send("human")
-	entry := read()
+	entry := loginNewCharacter(t, read, send, "Tester", "human")
 	mustContain(t, "entry scene", entry,
 		"The Cracked Nexus", "Type 'help'",
 		`@event room.info`, `"id":"nexus"`, `"north"`,
@@ -100,8 +127,7 @@ func TestChooseRaceReemitsCharCreate(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Picker")
+	loginNameAndPassphrase(t, read, send, "Picker")
 	first := read()
 	mustContain(t, "first menu", first, `@event char.create`, `"prompt":"race"`)
 
@@ -113,6 +139,8 @@ func TestChooseRaceReemitsCharCreate(t *testing.T) {
 	}
 
 	send("elf")
+	mustContain(t, "passphrase", read(), "secret phrase")
+	send(testPassphrase)
 	mustContain(t, "spawn", read(), "The Cracked Nexus", `"race":"elf"`)
 }
 
@@ -122,18 +150,12 @@ func TestResumePersistsTheCharacter(t *testing.T) {
 	ts := newWorldServer(t)
 
 	read, send, done := dial(t, ts)
-	read()
-	send("Mara")
-	read() // race menu
-	send("revenant")
-	read() // entry scene; makeNew persisted the new sheet
+	loginNewCharacter(t, read, send, "Mara", "revenant")
 	done()
 
 	read2, send2, done2 := dial(t, ts)
 	defer done2()
-	read2()
-	send2("Mara")
-	resumed := read2()
+	resumed := loginResume(t, read2, send2, "Mara")
 	mustContain(t, "resume", resumed, "Welcome back", "Type 'help'", `"race":"revenant"`)
 	if strings.Contains(resumed, "choose what you are") {
 		t.Fatalf("resume should skip the race menu: %q", resumed)
@@ -145,11 +167,7 @@ func TestWhoamiEmitsIdentity(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Wren")
-	read()
-	send("ghoul")
-	read()
+	loginNewCharacter(t, read, send, "Wren", "ghoul")
 	send("whoami")
 	mustContain(t, "whoami", read(), "@event char.identity", `"race":"ghoul"`)
 }
@@ -160,11 +178,7 @@ func TestEquipmentAndTitle(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Ash")
-	read()
-	send("human")
-	read() // at the nexus
+	loginNewCharacter(t, read, send, "Ash", "human") // at the nexus
 
 	send("inventory")
 	mustContain(t, "inventory", read(), "rusted shiv")
@@ -187,11 +201,7 @@ func TestRacialAbilityRequisition(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Reg")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Reg", "human")
 
 	send("requisition")
 	first := read()
@@ -210,11 +220,7 @@ func TestMobsConsiderLook(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Hunter")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Hunter", "human")
 
 	send("down") // nexus -> tunnels, where the glow-rat lives
 	mustContain(t, "tunnels mobs", read(), `"id":"tunnels"`, `"mobs":[{"id":"rat"`)
@@ -233,11 +239,7 @@ func TestCombatKillsTheGlowRat(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Brawler")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Brawler", "human")
 	send("down")
 	read() // tunnels, where the rat is
 
@@ -269,11 +271,7 @@ func TestLivingWorldAndRest(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Idler")
-	read()
-	send("human")
-	read() // entry: world.state has tick 0
+	loginNewCharacter(t, read, send, "Idler", "human") // entry: world.state has tick 0
 
 	advanced := false
 	for i := 0; i < 6 && !advanced; i++ {
@@ -304,11 +302,7 @@ func TestSleepDeliversDream(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Dreamer")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Dreamer", "human")
 
 	send("sleep")
 	dreamt := false
@@ -340,11 +334,7 @@ func readUntil(t *testing.T, read func() string, want string) string {
 // grave and the brand is ash-sworn, both on the structured channel.
 func TestCinderFrontMoralArc(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
-	read()
-	send("Turncoat")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Turncoat", "human")
 	send("north") // -> Scrap Market, the recruiter
 	read()
 	send("join")
@@ -355,11 +345,7 @@ func TestCinderFrontMoralArc(t *testing.T) {
 
 	read2, send2, done2 := dial(t, newWorldServer(t))
 	defer done2()
-	read2()
-	send2("Kapo")
-	read2()
-	send2("elf") // the hunted
-	read2()
+	loginNewCharacter(t, read2, send2, "Kapo", "elf")
 	send2("north")
 	read2()
 	send2("sense")
@@ -376,11 +362,7 @@ func TestWastesAndWaystation(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Walker")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Walker", "human")
 
 	send("east") // nexus -> workshop
 	read()
@@ -405,11 +387,7 @@ func TestTinkerEconomy(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Buyer")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Buyer", "human")
 
 	send("east") // nexus -> Tinker's Workshop
 	read()
@@ -427,11 +405,7 @@ func TestHoldingPitRescue(t *testing.T) {
 	read, send, done := dial(t, newWorldServer(t))
 	defer done()
 
-	read()
-	send("Liberator")
-	read()
-	send("human")
-	read()
+	loginNewCharacter(t, read, send, "Liberator", "human")
 
 	send("north") // -> Scrap Market
 	read()

@@ -21,7 +21,7 @@ func newWorldServerWithHub(t *testing.T, gh grid.Hub) (*httptest.Server, *Server
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
-	srv := NewServer(world.New("Test World", ""), st, gh, []string{"skyphusion"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := NewServer(world.New("Test World", ""), st, gh, []string{"skyphusion"}, testAdminToken, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(func() {
 		ts.Close()
@@ -73,17 +73,9 @@ func TestCombatResolvesWithBlackholedHub(t *testing.T) {
 	bRead, bSend, bDone := dial(t, ts)
 	defer bDone()
 
-	aRead()
-	aSend("Alpha")
-	aRead()
-	aSend("human")
-	aRead()
+	loginNewCharacter(t, aRead, aSend, "Alpha", "human")
 
-	bRead()
-	bSend("Beta")
-	bRead()
-	bSend("human")
-	bRead()
+	loginNewCharacter(t, bRead, bSend, "Beta", "human")
 
 	aSend("down")
 	aRead()

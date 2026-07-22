@@ -17,7 +17,7 @@ func TestWallBroadcast(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := NewServer(world.New("test", ""), st, nil, []string{"skyphusion"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := NewServer(world.New("test", ""), st, nil, []string{"skyphusion"}, testAdminToken, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(func() {
 		ts.Close()
@@ -29,17 +29,9 @@ func TestWallBroadcast(t *testing.T) {
 	obsRead, obsSend, obsDone := dial(t, ts)
 	defer obsDone()
 
-	adminRead()
-	adminSend("skyphusion")
-	adminRead()
-	adminSend("human")
-	adminRead()
+	loginNewCharacter(t, adminRead, adminSend, "skyphusion", "human")
 
-	obsRead()
-	obsSend("watcher")
-	obsRead()
-	obsSend("human")
-	obsRead()
+	loginNewCharacter(t, obsRead, obsSend, "watcher", "human")
 
 	obsSend("wall I should not be able to do this")
 	time.Sleep(200 * time.Millisecond)
@@ -70,17 +62,9 @@ func TestGiveItem(t *testing.T) {
 	qRead, qSend, qDone := dial(t, ts)
 	defer qDone()
 
-	pRead()
-	pSend("Giver")
-	pRead()
-	pSend("human")
-	pRead()
+	loginNewCharacter(t, pRead, pSend, "Giver", "human")
 
-	qRead()
-	qSend("Taker")
-	qRead()
-	qSend("human")
-	qRead()
+	loginNewCharacter(t, qRead, qSend, "Taker", "human")
 
 	pSend("north")
 	pRead()

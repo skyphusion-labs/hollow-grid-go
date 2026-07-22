@@ -16,7 +16,7 @@ func TestMobRespawn(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := world.New("test", "")
-	srv := NewServer(w, st, nil, nil, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	srv := NewServer(w, st, nil, nil, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
 	room := w.Room("tunnels")
 	rat := room.Mobs[0]
@@ -48,7 +48,7 @@ func TestMobRespawnSkipsDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := world.New("test", "")
-	srv := NewServer(w, st, nil, nil, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	srv := NewServer(w, st, nil, nil, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
 	srv.mu.Lock()
 	srv.deadMobs["rat"] = pendingRespawn{templateID: "rat", roomID: "tunnels", at: time.Now().UnixMilli() - 1}

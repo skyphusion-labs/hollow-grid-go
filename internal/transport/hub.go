@@ -36,7 +36,8 @@ func NewHub() *Hub {
 }
 
 // Register adds a player and returns their outbound push channel.
-func (h *Hub) Register(p *world.Player) chan string {
+// Returns nil,false when the name is already connected elsewhere on this world.
+func (h *Hub) Register(p *world.Player) (chan string, bool) {
 	ch := make(chan string, 256)
 	lp := &livePlayer{
 		name: p.Name, room: p.RoomID, title: p.Title,
@@ -45,9 +46,12 @@ func (h *Hub) Register(p *world.Player) chan string {
 		push: ch, plr: p,
 	}
 	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.players[p.Name]; ok {
+		return nil, false
+	}
 	h.players[p.Name] = lp
-	h.mu.Unlock()
-	return ch
+	return ch, true
 }
 
 // Unregister removes a player from the registry.
