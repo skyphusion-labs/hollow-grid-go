@@ -7,7 +7,7 @@ import (
 
 func TestSanitizePlayerName(t *testing.T) {
 	ok := map[string]string{
-		"alice": "alice",
+		"alice":  "alice",
 		"Bob_12": "Bob_12",
 	}
 	for in, want := range ok {
