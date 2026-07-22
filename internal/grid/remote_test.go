@@ -17,7 +17,7 @@ func TestRemoteHubUserAgent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	hub := NewRemoteHub(srv.URL, "")
+	hub := NewRemoteHub(srv.URL, "", "Rust Choir", "")
 	if _, err := hub.Tide(context.Background()); err != nil {
 		t.Fatalf("tide: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestRemoteHubTimesOutHungRPC(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	hub := NewRemoteHub(srv.URL, "")
+	hub := NewRemoteHub(srv.URL, "", "Rust Choir", "")
 	start := time.Now()
 	_, err := hub.Tide(context.Background())
 	elapsed := time.Since(start)

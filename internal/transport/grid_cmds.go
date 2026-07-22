@@ -180,6 +180,7 @@ func (s *session) mergeHubOnLogin() {
 			url = "ws://localhost:8790/ws"
 		}
 		_ = s.srv.grid.Register(regCtx, s.w.Name, url)
+		_ = s.srv.grid.ClaimCharacterLease(regCtx, s.player.Name)
 	}()
 }
 

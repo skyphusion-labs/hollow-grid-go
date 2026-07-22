@@ -42,7 +42,7 @@ func TestFederationLoopSurvivesBlackholedHub(t *testing.T) {
 	hubSrv := blackholeHubServer(t)
 	defer hubSrv.Close()
 
-	_, srv := newWorldServerWithHub(t, grid.NewRemoteHub(hubSrv.URL, ""))
+	_, srv := newWorldServerWithHub(t, grid.NewRemoteHub(hubSrv.URL, "", "Rust Choir", ""))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	srv.RunFederation(ctx)
@@ -63,7 +63,7 @@ func TestCombatResolvesWithBlackholedHub(t *testing.T) {
 	hubSrv := blackholeHubServer(t)
 	defer hubSrv.Close()
 
-	ts, srv := newWorldServerWithHub(t, grid.NewRemoteHub(hubSrv.URL, ""))
+	ts, srv := newWorldServerWithHub(t, grid.NewRemoteHub(hubSrv.URL, "", "Rust Choir", ""))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	srv.RunFederation(ctx)
