@@ -123,6 +123,7 @@ func (s *session) cmdExamine(arg string) {
 }
 
 func (s *session) cmdSay(msg string) {
+	msg = SanitizePlayerText(msg)
 	if msg == "" {
 		s.line("Say what?")
 		return

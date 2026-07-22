@@ -109,6 +109,14 @@ func handleConn(ctx context.Context, c *websocket.Conn, srv *Server) {
 	if err != nil || name == "" {
 		return
 	}
+	name, ok := SanitizePlayerName(name)
+	if !ok {
+		s.line("That name will not hold on the Grid. Use 2-32 letters, digits, dash, or underscore.")
+		if err := s.flush(ctx); err != nil {
+			return
+		}
+		return
+	}
 
 	if !s.srv.hub.TryReserve(name) {
 		s.line("")
@@ -1257,7 +1265,11 @@ func (s *session) cmdTell(arg string) {
 		return
 	}
 	targetName := parts[0]
-	msg := parts[1]
+	msg := SanitizePlayerText(parts[1])
+	if msg == "" {
+		s.line("Tell what?")
+		return
+	}
 	target, ok := s.srv.hub.Find(targetName)
 	if !ok {
 		s.line("No one by that name is connected.")
@@ -1284,7 +1296,7 @@ func (s *session) cmdReply(arg string) {
 }
 
 func (s *session) cmdYell(arg string) {
-	msg := strings.TrimSpace(arg)
+	msg := SanitizePlayerText(strings.TrimSpace(arg))
 	if msg == "" {
 		s.line("Yell what?  (yell <message>)")
 		return
@@ -1302,7 +1314,7 @@ func (s *session) cmdYell(arg string) {
 }
 
 func (s *session) cmdEmote(arg string) {
-	action := strings.TrimSpace(arg)
+	action := SanitizePlayerText(strings.TrimSpace(arg))
 	if action == "" {
 		s.line("Emote what?  (emote <action>)")
 		return
