@@ -55,7 +55,7 @@ func absInt(n int) int {
 }
 
 func (s *session) cmdGridcast(arg string) {
-	msg := strings.TrimSpace(arg)
+	msg := SanitizePlayerText(strings.TrimSpace(arg))
 	if msg == "" {
 		s.line("Gridcast what? (gridcast <message> -- the dead network carries it to every world)")
 		return

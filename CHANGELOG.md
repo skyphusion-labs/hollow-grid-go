@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.6
+
+### Security (K3 post-audit)
+
+- Sanitize `title` and gridcast send/relay text before broadcast.
+
 ## v0.1.5
 
 ### Security (K3 re-pass #64)
