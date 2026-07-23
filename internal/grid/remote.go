@@ -99,7 +99,7 @@ func (h *RemoteHub) call(ctx context.Context, method string, params []any, out a
 }
 
 func (h *RemoteHub) Record(ctx context.Context, world, node, kind, text string, at int64) error {
-	return h.call(ctx, "record", []any{world, node, kind, text, at}, nil, "")
+	return h.call(ctx, "record", []any{world, node, kind, text, at}, nil, world)
 }
 
 func (h *RemoteHub) RecentAcross(ctx context.Context, world string, limit int) ([]Trace, error) {
@@ -116,7 +116,7 @@ func (h *RemoteHub) Tide(ctx context.Context) (int, error) {
 
 func (h *RemoteHub) ShiftTide(ctx context.Context, delta int) (int, error) {
 	var n int
-	err := h.call(ctx, "shiftTide", []any{delta}, &n, "")
+	err := h.call(ctx, "shiftTide", []any{delta}, &n, h.world)
 	return n, err
 }
 
@@ -149,7 +149,7 @@ func (h *RemoteHub) ListWorlds(ctx context.Context) ([]WorldInfo, error) {
 }
 
 func (h *RemoteHub) GridCast(ctx context.Context, world, sender, text string) error {
-	return h.call(ctx, "gridcast", []any{world, sender, text}, nil, "")
+	return h.call(ctx, "gridcast", []any{world, sender, text}, nil, world)
 }
 
 func (h *RemoteHub) CastsSince(ctx context.Context, sinceID, limit int) ([]Cast, error) {
@@ -166,7 +166,7 @@ func (h *RemoteHub) LedgerStats(ctx context.Context) ([]LedgerKind, error) {
 
 func (h *RemoteHub) PruneLedgerKinds(ctx context.Context, kinds []string) (PruneResult, error) {
 	var out PruneResult
-	err := h.call(ctx, "pruneLedgerKinds", []any{kinds}, &out, "")
+	err := h.call(ctx, "pruneLedgerKinds", []any{kinds}, &out, h.world)
 	return out, err
 }
 
@@ -185,7 +185,7 @@ func (h *RemoteHub) Presence(ctx context.Context, maxAgeMs int64) ([]Presence, e
 }
 
 func (h *RemoteHub) RecordRescued(ctx context.Context, world, name, savedBy string, at int64) error {
-	return h.call(ctx, "recordRescued", []any{world, name, savedBy, at}, nil, "")
+	return h.call(ctx, "recordRescued", []any{world, name, savedBy, at}, nil, world)
 }
 
 func (h *RemoteHub) RecentRescued(ctx context.Context, limit int) ([]Rescued, error) {
@@ -195,7 +195,7 @@ func (h *RemoteHub) RecentRescued(ctx context.Context, limit int) ([]Rescued, er
 }
 
 func (h *RemoteHub) RecordFallen(ctx context.Context, world, name, room string, at int64) error {
-	return h.call(ctx, "recordFallen", []any{world, name, room, at}, nil, "")
+	return h.call(ctx, "recordFallen", []any{world, name, room, at}, nil, world)
 }
 
 func (h *RemoteHub) RecentFallen(ctx context.Context, limit int) ([]Fallen, error) {
