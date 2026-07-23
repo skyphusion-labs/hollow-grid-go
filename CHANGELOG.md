@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.7
+
+### Security (K3 wave 5)
+
+- Send `X-Grid-World` / world key on all mutating hub RPC calls (shiftTide, gridcast, record*, prune).
+
 ## v0.1.6
 
 ### Security (K3 post-audit)
