@@ -97,12 +97,12 @@ func (s *Server) pollGridcasts(ctx context.Context) {
 			maxID = c.ID
 		}
 		ev, err := event.Line(event.CommGridcast, map[string]string{
-			"world": c.World, "from": c.Sender, "text": c.Text,
+			"world": c.World, "from": SanitizePlayerText(c.Sender), "text": SanitizePlayerText(c.Text),
 		})
 		if err != nil {
 			continue
 		}
-		prose := fmt.Sprintf("\r\n[Grid] [%s] %s: %s\r\n", c.World, c.Sender, c.Text)
+		prose := fmt.Sprintf("\r\n[Grid] [%s] %s: %s\r\n", c.World, SanitizePlayerText(c.Sender), SanitizePlayerText(c.Text))
 		s.hub.BroadcastAll(prose + ev + "\r\n> ")
 	}
 	s.mu.Lock()

@@ -589,6 +589,7 @@ func (s *session) handle(cmd string) bool {
 		s.event(event.CharEquipment, s.player.Equip())
 		s.line(s.equipmentLine())
 	case "title":
+		arg = SanitizePlayerText(arg)
 		s.player.Title = arg
 		s.persist()
 		s.srv.hub.Sync(s.player)
