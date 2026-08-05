@@ -4,18 +4,18 @@ Guidance for Claude Code (and the crew) working in this repo.
 
 ## What this is
 
-**A Hollow Grid world server, in Go.** The Hollow Grid is a federated text MUD whose reference
-implementation is TypeScript on Cloudflare Workers ([the-hollow-grid](https://github.com/SkyPhusion/the-hollow-grid));
-this is a from-scratch port of the **world half** -- a single autonomous game world that speaks the
-Grid's language-agnostic wire protocol and can (eventually) join the federation as a node. Players (or
-LLM agents) connect over WebSocket and play with plain-text commands.
+**A Hollow Grid world server, in Go (Rust Choir).** Language port of the world half of the
+federated text MUD whose reference implementation is TypeScript on Cloudflare Workers
+([the-hollow-grid](https://github.com/skyphusion-labs/the-hollow-grid)). Speaks the same
+language-agnostic wire protocol and joins the federation as a node. Players (or LLM agents)
+connect over WebSocket and play with plain-text commands.
 
-**Status:** a fully playable world, standalone or federated, with TS command-list
-parity (ground loot, flee, consumables, stolen-kill sync, …). The definition of
-done is the upstream `smoke.mjs` conformance suite (**135 checks**). Quiet prod
-baseline (2026-07-09 evening, bots offline): **156 ok / 1 fail / 0 skip** (the
-fail is holding-pit warden grace / combat variance). Live at
-`wss://rustchoir.skyphusion.org/ws`. See `docs/PLAN.md` for the handoff.
+**Protocol authority:** `the-hollow-grid/docs/protocol.md` (upstream). Do not invent protocol;
+mirror it. Assert on `@event`, never English prose alone.
+
+**Status:** fully playable, standalone or federated. **Definition of done = upstream
+`smoke.mjs`** (suite size tracks upstream head; re-score against current the-hollow-grid).
+Live at `wss://rustchoir.skyphusion.org/ws`. See `docs/PLAN.md` for the handoff.
 
 ## The Grid federation (the shared map)
 
