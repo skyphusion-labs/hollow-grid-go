@@ -12,7 +12,7 @@ node when `GRID_HUB_URL` is set.
 > of a choice is legible as data, not buried in prose. This port keeps that intact.
 
 - **Upstream contract:** [`the-hollow-grid/docs/protocol.md`](https://github.com/SkyPhusion/the-hollow-grid/blob/main/docs/protocol.md) -- the wire spec is deliberately language-agnostic; a Go world is a first-class citizen of the same Grid.
-- **Definition of done:** the upstream `smoke.mjs` conformance suite (**135 checks**). Quiet prod **Rust Choir** scoreboard (2026-07-09 evening, hub + Dustfall, bots offline): **156 ok / 1 fail / 0 skip**; the remaining fail is holding-pit warden grace / combat variance (same family as the older slow-box skip).
+- **Definition of done:** the upstream `smoke.mjs` conformance suite (**166 `check()` sites** at current upstream head; count tracks the suite, score against head not a frozen number). Quiet prod **Rust Choir** scoreboard (2026-07-09 evening, hub + Dustfall, bots offline): **156 ok / 1 fail / 0 skip**; the remaining fail is holding-pit warden grace / combat variance (same family as the older slow-box skip).
 - **Status:** fully playable **standalone** (LocalHub fallback) or **federated** (HTTP Grid Hub client in `internal/grid`). Live fleet deployment: **`wss://rustchoir.skyphusion.org/ws`**.
 
 ## Play now (Rust Choir)
