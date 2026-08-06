@@ -140,3 +140,9 @@ Dockerfile          multi-stage build -> distroless
 Conventional Commits (`feat(scope):`, `fix(scope):`, `docs:`); body explains the why, footer lists
 files touched. SemVer-style `0.MINOR.PATCH` while pre-1.0 (PATCH for fixes, MINOR for a new system /
 command / content set or a batch of newly-green conformance checks).
+
+## Release / deploy
+
+**Tag-gated production deploy.** Merges to `main` run CI only; they do not ship production.
+Cut an annotated SemVer tag on `main` to release (`git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`).
+Deploy workflows assert the tag commit is an ancestor of `origin/main`.
