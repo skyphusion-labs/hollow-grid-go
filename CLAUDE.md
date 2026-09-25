@@ -15,7 +15,7 @@ mirror it. Assert on `@event`, never English prose alone.
 
 **Status:** fully playable, standalone or federated. **Definition of done = upstream
 `smoke.mjs`** (suite size tracks upstream head; re-score against current the-hollow-grid).
-Live at `wss://rustchoir.skyphusion.org/ws`. See `docs/PLAN.md` for the handoff.
+Previously live at `wss://rustchoir.skyphusion.org/ws`; not currently deployed (the fleet host it ran on was decommissioned 2026-09-24, see the CI runners note below). See `docs/PLAN.md` for the handoff.
 
 ## The Grid federation (the shared map)
 
@@ -122,10 +122,11 @@ Dockerfile          multi-stage build -> distroless
 - **CI runners:** PUBLIC repo -> GitHub-hosted `ubuntu-latest` for `ci.yml` and `release.yml`
   (fork-safe). `release.yml` builds + pushes to GHCR (`:<sha>` + `:latest`) on push to `main`;
   the smoke conformance run is informational / non-blocking while the port is in progress (a
-  partial pass never reds the build). After a green GHCR push, dispatches `fleet-chezmoi`
-  `rust-choir-roll` to pull + redeploy Rust Choir on biafra (org secrets
-  `FLEET_DISPATCH_TOKEN` + `GHCR_READ_PAT`; see `crew-secrets` README and
-  `fleet-chezmoi/system/swarm/RUNBOOK-rust-choir-roll.md`).
+  partial pass never reds the build). **Known defect, left unfixed here:** the release job
+  still runs a post-push dispatch step (`dispatch-fleet-rust-choir-roll.sh`) aimed at
+  redeploying on `biafra` via `fleet-chezmoi`'s `rust-choir-roll` workflow. The Hetzner
+  fleet, biafra included, was decommissioned 2026-09-24, so that target no longer exists; the
+  step itself needs a real fix (a live deploy target or removal), not a doc update.
 
 ## Crew + identity
 
