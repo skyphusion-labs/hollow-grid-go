@@ -15,7 +15,7 @@ mirror it. Assert on `@event`, never English prose alone.
 
 **Status:** fully playable, standalone or federated. **Definition of done = upstream
 `smoke.mjs`** (suite size tracks upstream head; re-score against current the-hollow-grid).
-Live at `wss://rustchoir.skyphusion.org/ws`. See `docs/PLAN.md` for the handoff.
+Previously live at `wss://rustchoir.skyphusion.org/ws`; not currently deployed (the fleet host it ran on was decommissioned 2026-09-24, see the CI runners note below). See `docs/PLAN.md` for the handoff.
 
 ## The Grid federation (the shared map)
 
