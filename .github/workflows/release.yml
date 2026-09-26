@@ -8,9 +8,8 @@ name: release
 #     the port is in progress (a partial pass never reds the build)
 #   - push to GHCR (:<sha> + :latest) on a pushed version tag (v*) only
 #
-# After a green GHCR push on a version tag, dispatches fleet-chezmoi rust-choir-roll to pull +
-# redeploy on biafra. Org secrets FLEET_DISPATCH_TOKEN + GHCR_READ_PAT (see crew-secrets
-# README; GHCR_READ_PAT escrowed in secrets-shared.env.age).
+# There is no deploy step after the GHCR push: the Hetzner fleet (biafra included) was
+# decommissioned 2026-09-24, so this workflow's only release output is the GHCR image.
 #
 # Public repo -> GitHub-hosted ubuntu-latest (fork-safe), never the fleet pool.
 # GHCR auth uses the built-in GITHUB_TOKEN (no PAT) with
@@ -88,13 +87,13 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Assert tag is on main (no prod publish/roll from an unmerged branch)
+      - name: Assert tag is on main (no prod publish from an unmerged branch)
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
           git fetch --no-tags origin main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::tag $GITHUB_REF_NAME points at $GITHUB_SHA which is not on origin/main; refusing to publish/roll an unreviewed commit"
+            echo "::error::tag $GITHUB_REF_NAME points at $GITHUB_SHA which is not on origin/main; refusing to publish an unreviewed commit"
             exit 1
           fi
 
@@ -108,12 +107,6 @@ jobs:
           docker push "$IMAGE:${GITHUB_SHA}"
           docker push "$IMAGE:latest"
           echo "Pushed hollow-grid-go:${GITHUB_SHA}."
-
-      - name: Dispatch rust-choir roll to fleet-chezmoi (tag only)
-        if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
-        env:
-          FLEET_DISPATCH_TOKEN: ${{ secrets.FLEET_DISPATCH_TOKEN }}
-        run: bash .github/scripts/dispatch-fleet-rust-choir-roll.sh
 
       - name: Clean up
         if: always()
