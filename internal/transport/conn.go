@@ -153,10 +153,11 @@ func handleConn(ctx context.Context, c *websocket.Conn, srv *Server) {
 	if sheet, found, lerr := s.store.Load(name); lerr != nil {
 		s.log.Warn("char load failed", "name", name, "err", lerr)
 		s.line("")
-		s.line("The Grid stutters and cannot find your record. Entering you as new.")
-		if !s.makeNew(ctx, name) {
+		s.line("The Grid stutters and cannot read your record. Try again shortly.")
+		if err := s.flush(ctx); err != nil {
 			return
 		}
+		return
 	} else if found {
 		oldHash := sheet.SecretHash
 		hash, ok := s.authenticatePassphrase(ctx, sheet.SecretHash)
