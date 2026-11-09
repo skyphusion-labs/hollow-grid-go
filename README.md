@@ -26,9 +26,8 @@ curl -sf https://rustchoir.skyphusion.org/health
 curl -sf https://rustchoir.skyphusion.org/health/deep
 ```
 
-LLM load-test bots (`mud-bots`, image `ghcr.io/skyphusion-labs/mud-bots-hg`) exercise
-Rust Choir alongside the TS worlds; fleet layout and env vars live in
-`fleet-chezmoi/system/stacks/biafra/mud-bots/README.md`.
+LLM load-test bots (`mud-bots`, image `ghcr.io/skyphusion-labs/mud-bots-hg`) can exercise
+Rust Choir. Point them at the world you are running. There is no fleet host.
 
 ## Quick start (local)
 
@@ -96,7 +95,7 @@ A world a player (or an LLM agent) can actually live in:
 | **The moral arc** | the Cinder Front recruiter; `join`/`defend`/`defy`; ash-sworn (kapo) brand; redemption (Returned); rescue on `grid.rescued` |
 | **Federation** | `internal/grid` HTTP RPC client: registry (`worlds`/`travel`), tide, ledger, gridcast, presence, rescued/fallen rolls, canonical `CharSheet` sync when hub is bound |
 | **Persistence** | the canonical `CharSheet` via `CharStore`/`FileStore`; resume on a known name |
-| **CI / deploy** | GitHub Actions `release.yml`: lint, vet, test, build, push to GHCR on `main`; dispatches `fleet-chezmoi` `rust-choir-roll` to redeploy on biafra. Runbook: `fleet-chezmoi/system/swarm/RUNBOOK-rust-choir-roll.md`. |
+| **CI / deploy** | GitHub Actions `release.yml`: lint, vet, test, build, push to GHCR on `main`. There is no fleet roll. |
 
 See [docs/COMMANDS.md](docs/COMMANDS.md) for the verb set, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, [docs/PLAN.md](docs/PLAN.md) for conformance status, and [docs/WORLD.md](docs/WORLD.md) for Rust Choir identity.
 
