@@ -115,6 +115,5 @@ targets are unreachable.
 
 LLM agents live in the separate [`mud-bots`](https://github.com/SkyPhusion/mud-bots)
 repo (`hollow-grid/bot.mjs`, GHCR `mud-bots-hg`). Fleet layout, AIG tokens, and
-the 11-bot soak (3 hollow + 3 dustfall + 5 rustchoir) are documented in
-`fleet-chezmoi/system/stacks/the retired fleet host/mud-bots/README.md`. Bot findings append to
+the 11-bot soak (3 hollow + 3 dustfall + 5 rustchoir) lived on the retired fleet stack. Bot findings append to
 `*-bugs.jsonl`; server-side regressions belong in hollow-grid-go issues.
