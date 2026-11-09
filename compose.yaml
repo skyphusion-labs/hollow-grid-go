@@ -4,7 +4,8 @@
 # Federation: set GRID_HUB_URL + GRID_HUB_TOKEN in .env (see .env.example).
 # Standalone works with those unset (LocalHub fallback).
 #
-# There is no fleet host. This file binds the world on localhost.
+# There is no fleet host. The port mapping publishes the world on the host loopback
+# only (127.0.0.1). Changing it to "8790:8790" exposes it on all host interfaces.
 # Set GRID_HUB_URL if you want to join the live hub.
 
 services:
@@ -13,7 +14,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "8790:8790"
+      - "127.0.0.1:8790:8790"
     volumes:
       - rust-choir-data:/data
     env_file:
