@@ -4,8 +4,8 @@
 # Federation: set GRID_HUB_URL + GRID_HUB_TOKEN in .env (see .env.example).
 # Standalone works with those unset (LocalHub fallback).
 #
-# Fleet (biafra): VLAN bind + cloudflared at rustchoir.skyphusion.org -- see
-# fleet-chezmoi system/stacks/biafra/rust-choir/.
+# There is no fleet host. This file binds the world on localhost.
+# Set GRID_HUB_URL if you want to join the live hub.
 
 services:
   rust-choir:
@@ -23,7 +23,7 @@ services:
       LISTEN_ADDR: ":8790"
       DATA_DIR: /data
       WORLD_NAME: Rust Choir
-      # WORLD_URL: wss://rustchoir.skyphusion.org/ws
+      # WORLD_URL: wss://your-host.example/ws
       # GRID_HUB_URL: https://grid-hub.example/rpc
       # GRID_HUB_TOKEN: set in .env (never commit)
 

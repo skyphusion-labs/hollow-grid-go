@@ -13,22 +13,14 @@ node when `GRID_HUB_URL` is set.
 
 - **Upstream contract:** [`the-hollow-grid/docs/protocol.md`](https://github.com/SkyPhusion/the-hollow-grid/blob/main/docs/protocol.md) -- the wire spec is deliberately language-agnostic; a Go world is a first-class citizen of the same Grid.
 - **Definition of done:** the upstream `smoke.mjs` conformance suite (**166 `check()` sites** at current upstream head; count tracks the suite, score against head not a frozen number). Quiet prod **Rust Choir** scoreboard (2026-07-09 evening, hub + Dustfall, bots offline): **156 ok / 1 fail / 0 skip**; the remaining fail is holding-pit warden grace / combat variance (same family as the older slow-box skip).
-- **Status:** fully playable **standalone** (LocalHub fallback) or **federated** (HTTP Grid Hub client in `internal/grid`). Live fleet deployment: **`wss://rustchoir.skyphusion.org/ws`**.
+- **Status:** fully playable **standalone** (LocalHub fallback) or **federated** (HTTP Grid Hub client in `internal/grid`). The public Rust Choir host is retired.
 
-## Play now (Rust Choir)
+## Play it
 
-The Go port runs in production as **Rust Choir**, the third world on the Grid
-(alongside hollow.skyphusion.org and dustfall.skyphusion.org):
+The public Rust Choir host is retired. Run the world locally (quick start below), or pull `ghcr.io/skyphusion-labs/hollow-grid-go`. Dustfall and the Hollow Grid Workers worlds are still up.
 
-```sh
-wscat -c wss://rustchoir.skyphusion.org/ws
-curl -sf https://rustchoir.skyphusion.org/health
-curl -sf https://rustchoir.skyphusion.org/health/deep
-```
-
-LLM load-test bots (`mud-bots`, image `ghcr.io/skyphusion-labs/mud-bots-hg`) exercise
-Rust Choir alongside the TS worlds; fleet layout and env vars live in
-`fleet-chezmoi/system/stacks/biafra/mud-bots/README.md`.
+LLM load-test bots (`mud-bots`, image `ghcr.io/skyphusion-labs/mud-bots-hg`) can exercise
+Rust Choir. Point them at the world you are running. There is no fleet host.
 
 ## Quick start (local)
 
@@ -68,7 +60,7 @@ Or pull the release image directly:
 ```sh
 docker run -d --name rust-choir -p 8790:8790 \
   -v rust-choir-data:/data \
-  -e WORLD_URL=wss://rustchoir.skyphusion.org/ws \
+  -e WORLD_URL=wss://your-host.example/ws \
   -e GRID_HUB_URL=https://grid-hub.skyphusion.org/rpc \
   -e GRID_HUB_TOKEN='…' \
   ghcr.io/skyphusion-labs/hollow-grid-go:latest
@@ -96,7 +88,7 @@ A world a player (or an LLM agent) can actually live in:
 | **The moral arc** | the Cinder Front recruiter; `join`/`defend`/`defy`; ash-sworn (kapo) brand; redemption (Returned); rescue on `grid.rescued` |
 | **Federation** | `internal/grid` HTTP RPC client: registry (`worlds`/`travel`), tide, ledger, gridcast, presence, rescued/fallen rolls, canonical `CharSheet` sync when hub is bound |
 | **Persistence** | the canonical `CharSheet` via `CharStore`/`FileStore`; resume on a known name |
-| **CI / deploy** | GitHub Actions `release.yml`: lint, vet, test, build, push to GHCR on `main`; dispatches `fleet-chezmoi` `rust-choir-roll` to redeploy on biafra. Runbook: `fleet-chezmoi/system/swarm/RUNBOOK-rust-choir-roll.md`. |
+| **CI / deploy** | GitHub Actions `release.yml`: lint, vet, test, build, push to GHCR on `main`. There is no fleet roll. |
 
 See [docs/COMMANDS.md](docs/COMMANDS.md) for the verb set, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, [docs/PLAN.md](docs/PLAN.md) for conformance status, and [docs/WORLD.md](docs/WORLD.md) for Rust Choir identity.
 
