@@ -37,7 +37,7 @@ suite revision / load conditions.
 - [x] the **holding-pit rescue** -- warden, `free` → `grid.rescued`; warden grace window + antidote affordance gate
 - [x] **dreams** -- `sleep` → `char.dream`
 - [x] **persistence** -- `CharStore`/`FileStore`; resume on a known name
-- [x] **Docker** + **CI** (GHCR push + auto-roll to biafra via `rust-choir-roll`)
+- [x] **Docker** + **CI** (GHCR push + auto-roll to the retired fleet host via `rust-choir-roll`)
 
 **Phase 2 -- multiplayer and federation (world-side)**
 - [x] **Multiplayer** -- session registry, `tell`/`reply`/`yell`/`emote`, `room.info.players`
@@ -57,7 +57,7 @@ suite revision / load conditions.
 | [#35](https://github.com/skyphusion-labs/hollow-grid-go/pull/35) | TS parity: ground loot, get/drop/use/examine, flee, stolen-kill vitals, poison, mob loot/XP, sell `value`, moral `room.actions` from faction, missing verbs/aliases |
 | [#36](https://github.com/skyphusion-labs/hollow-grid-go/pull/36) | Forgive recipient prose + `char.forgiven` use `PushReliable` (kapo smoke was dropping under heartbeat load) |
 
-Both merged + GHCR `latest` + `rust-choir-roll` to biafra. New transport files:
+Both merged + GHCR `latest` + `rust-choir-roll` to the retired fleet host. New transport files:
 `internal/transport/{combat,ground,items_cmds}.go` (+ `combat_parity_test.go`).
 
 ## Next (optional / not blockers)
@@ -116,5 +116,5 @@ targets are unreachable.
 LLM agents live in the separate [`mud-bots`](https://github.com/SkyPhusion/mud-bots)
 repo (`hollow-grid/bot.mjs`, GHCR `mud-bots-hg`). Fleet layout, AIG tokens, and
 the 11-bot soak (3 hollow + 3 dustfall + 5 rustchoir) are documented in
-`fleet-chezmoi/system/stacks/biafra/mud-bots/README.md`. Bot findings append to
+`fleet-chezmoi/system/stacks/the retired fleet host/mud-bots/README.md`. Bot findings append to
 `*-bugs.jsonl`; server-side regressions belong in hollow-grid-go issues.
