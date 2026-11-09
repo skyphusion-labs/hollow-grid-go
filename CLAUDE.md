@@ -58,8 +58,8 @@ This is a Go module (`github.com/SkyPhusion/hollow-grid-go`), NOT an npm project
 dependency: `github.com/coder/websocket`.
 
 ```bash
-# Run the world (default :8790):
-go run ./cmd/world --addr :8790 --world-name "The Hollow Grid (Go)" --data ./data
+# Run the world. Flag defaults in cmd/world/main.go: :8790, "Rust Choir", data dir "data".
+go run ./cmd/world --addr :8790 --world-name "Rust Choir" --data data
 
 # Clean before commit + test:
 go vet ./...
@@ -69,7 +69,7 @@ go build ./...
 
 # Play / score it with the upstream client + conformance suite (from the the-hollow-grid repo):
 wscat -c ws://localhost:8790/ws
-MUD_URL=ws://localhost:8790/ws node smoke.mjs    # 135 checks; set DUSTFALL_URL for federation phase
+MUD_URL=ws://localhost:8790/ws node smoke.mjs    # suite size tracks upstream head; set DUSTFALL_URL for the federation phase
 
 # Container (multi-stage static CGO-off binary on distroless):
 docker build -t hollow-grid-go .
@@ -84,8 +84,9 @@ docker run -d --name hollow-grid-go -p 8790:8790 -v hollow-grid-go-data:/data ho
 Two layers. (1) `go test ./...` is the local gate: unit tests plus transport conformance tests that
 drive REAL WebSocket sessions (`internal/transport/conn_test.go`). Run it plus `go vet ./...` and
 `gofmt -l .` (clean) before committing. (2) The upstream `smoke.mjs` is the definition-of-done
-scoreboard: point it at a running server (or the container). Prod baseline (2026-07-09):
-**158 ok / 0 fail / 1 skip** on Rust Choir with hub + Dustfall. Assert on `@event`, not prose.
+scoreboard: point it at a running server (or the container). Dated snapshot only (2026-07-09):
+**158 ok / 0 fail / 1 skip** on Rust Choir with hub + Dustfall. Not a current gate; see `docs/PLAN.md`.
+Assert on `@event`, not prose.
 
 ## Architecture
 
@@ -108,8 +109,9 @@ Dockerfile          multi-stage build -> distroless
 - **The moral arc is legible as data.** The Cinder Front recruiter brands `faction:front`; a hunted
   race who joins is branded `ash-sworn` (the kapo) with the choice flagged `valence:"grave"`; rescue is
   a real, named, unfarmable virtuous act on `grid.rescued`. These are first-class `@event` payloads.
-- **The federation seam is `internal/store`.** The `CharStore` interface (today a local `FileStore`) is
-  exactly where the federation client will later persist to the Grid; keep the persistence boundary clean.
+- **Offline persistence is `internal/store`.** `FileStore` implements `CharStore` for local play.
+  When `GRID_HUB_URL` is set, `internal/grid.RemoteHub` loads and commits the canonical sheet
+  (`LoadCharacter`, `CommitCharacter`). Hub failure must not block play.
 
 ## Conventions
 
@@ -120,13 +122,12 @@ Dockerfile          multi-stage build -> distroless
 - Output is plain UTF-8 with CRLF lines for clean rendering in line-based clients; an undeclared
   exit/command returns a clear message (no silent no-op -- that was the bug that motivated the project).
 - **CI runners:** PUBLIC repo -> GitHub-hosted `ubuntu-latest` for `ci.yml` and `release.yml`
-  (fork-safe). `release.yml` builds + pushes to GHCR (`:<sha>` + `:latest`) on push to `main`;
-  the smoke conformance run is informational / non-blocking while the port is in progress (a
-  partial pass never reds the build). **Known defect, left unfixed here:** the release job
-  still runs a post-push dispatch step (`dispatch-fleet-rust-choir-roll.sh`) aimed at
-  redeploying on `biafra` via `fleet-chezmoi`'s `rust-choir-roll` workflow. The Hetzner
-  fleet, biafra included, was decommissioned 2026-09-24, so that target no longer exists; the
-  step itself needs a real fix (a live deploy target or removal), not a doc update.
+  (fork-safe). `release.yml` builds the image on every push and PR. It pushes to GHCR
+  (`:<sha>` and `:latest`) only on a pushed `v*` tag, after asserting that tag commit is an
+  ancestor of `origin/main`. Smoke conformance is informational and non-blocking (a partial
+  pass never reds the build). There is no host deploy step. The Hetzner fleet, biafra
+  included, was decommissioned 2026-09-24. `release.yml` does not call
+  `dispatch-fleet-rust-choir-roll.sh`.
 
 ## Crew + identity
 
@@ -144,6 +145,6 @@ command / content set or a batch of newly-green conformance checks).
 
 ## Release / deploy
 
-**Tag-gated production deploy.** Merges to `main` run CI only; they do not ship production.
-Cut an annotated SemVer tag on `main` to release (`git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`).
-Deploy workflows assert the tag commit is an ancestor of `origin/main`.
+**Tag-gated GHCR publish, not a host deploy.** Merges to `main` run CI and build the image; they do not push it.
+Cut an annotated SemVer tag on `main` to publish (`git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`).
+`release.yml` asserts the tag commit is an ancestor of `origin/main` before pushing `:<sha>` and `:latest`.
