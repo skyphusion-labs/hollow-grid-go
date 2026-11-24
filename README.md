@@ -13,20 +13,20 @@ node when `GRID_HUB_URL` is set.
 
 - **Upstream contract:** [`the-hollow-grid/docs/protocol.md`](https://github.com/SkyPhusion/the-hollow-grid/blob/main/docs/protocol.md) -- the wire spec is deliberately language-agnostic; a Go world is a first-class citizen of the same Grid.
 - **Definition of done:** the upstream `smoke.mjs` conformance suite (**166 `check()` sites** at current upstream head; count tracks the suite, score against head not a frozen number). Quiet prod **Rust Choir** scoreboard (2026-07-09 evening, hub + Dustfall, bots offline): **156 ok / 1 fail / 0 skip**; the remaining fail is holding-pit warden grace / combat variance (same family as the older slow-box skip).
-- **Status:** fully playable **standalone** (LocalHub fallback) or **federated** (HTTP Grid Hub client in `internal/grid`). The public Rust Choir host is retired.
+- **Status:** fully playable **standalone** (LocalHub fallback) or **federated** (HTTP Grid Hub client in `internal/grid`). Live at `wss://rustchoir.skyphusion.org/ws`.
 
 ## Play it
 
-The public Rust Choir host is retired. Run the world locally (quick start below), or pull `ghcr.io/skyphusion-labs/hollow-grid-go`. Dustfall and the Hollow Grid Workers worlds are still up.
+Play at `wss://rustchoir.skyphusion.org/ws`. One Durable Object runs the existing container. You can also run the world locally (quick start below), or pull `ghcr.io/skyphusion-labs/hollow-grid-go`.
 
 LLM load-test bots (`mud-bots`, image `ghcr.io/skyphusion-labs/mud-bots-hg`) can exercise
-Rust Choir. Point them at the world you are running. There is no fleet host.
+Rust Choir. Point them at the world you are running.
 
 ## Quick start (local)
 
 ```sh
 # run it (needs Go 1.26+)
-go run ./cmd/world --addr :8790 --world-name "The Hollow Grid (Go)" --data ./data
+go run ./cmd/world --addr :8790 --world-name "Rust Choir" --data ./data
 
 # play it with any raw WebSocket client
 wscat -c ws://localhost:8790/ws

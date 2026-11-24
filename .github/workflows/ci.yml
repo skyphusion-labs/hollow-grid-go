@@ -17,12 +17,53 @@ jobs:
   ci:
     name: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
       - run: go vet ./...
       - run: go test -race ./...
       - run: go build ./...
+      - name: Fetch upstream smoke suite
+        run: git clone --depth 1 https://github.com/skyphusion-labs/the-hollow-grid.git /tmp/the-hollow-grid
+      - name: Blocking upstream smoke
+        env:
+          ADMIN_TOKEN: ci-test-admin-token
+          MUD_URL: ws://127.0.0.1:8790/ws
+          SMOKE_SLOW: "2"
+          DUSTFALL_URL: ws://127.0.0.1:18788/ws
+        run: |
+          set -euo pipefail
+          data="${RUNNER_TEMP}/choir"
+          mkdir -p "$data"
+          go run ./cmd/world --addr 127.0.0.1:8790 --data "$data" >"$RUNNER_TEMP/world.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" >/dev/null 2>&1 || true' EXIT
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8790/health >/dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "FAIL: world did not become healthy" >&2
+            cat "$RUNNER_TEMP/world.log" >&2
+            exit 1
+          fi
+          set +e
+          timeout 900 node /tmp/the-hollow-grid/smoke.mjs > smoke.txt 2>&1
+          smoke_rc=$?
+          set -e
+          pass=$(grep -c '^ok' smoke.txt || true)
+          fail=$(grep -c '^FAIL' smoke.txt || true)
+          skip=$(grep -c '^SKIP' smoke.txt || true)
+          echo "smoke conformance: ${pass} ok / ${fail} fail / ${skip} skip (rc=${smoke_rc})"
+          if [ "$pass" -eq 0 ] || [ "$smoke_rc" -ne 0 ] || [ "$fail" -ne 0 ]; then
+            tail -30 smoke.txt >&2
+            exit 1
+          fi

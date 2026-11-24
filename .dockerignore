@@ -1,6 +1,11 @@
 # keep the build context small and reproducible
 .git
 .gitignore
+.wrangler
+node_modules
+.dev.vars
+.env
+.local
 /world
 /bin/
 /data/

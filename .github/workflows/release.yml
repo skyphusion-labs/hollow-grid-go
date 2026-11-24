@@ -4,8 +4,7 @@ name: release
 # Jenkins pipeline. Behaviour matches the Jenkinsfile:
 #   - lint (gofmt) + vet + test on every push/PR
 #   - docker build on every push/PR (build errors surface early)
-#   - smoke conformance suite after build -- informational, non-blocking while
-#     the port is in progress (a partial pass never reds the build)
+#   - smoke conformance suite after build (blocking)
 #   - push to GHCR (:<sha> + :latest) on a pushed version tag (v*) only
 #
 # There is no deploy step after the GHCR push: the Hetzner fleet (biafra included) was
@@ -37,7 +36,7 @@ jobs:
   build:
     name: Lint, test, build, and push
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,21 +61,42 @@ jobs:
       - name: Build image
         run: docker build -t "$IMAGE:${GITHUB_SHA}" -t "$IMAGE:latest" .
 
-      - name: Smoke conformance (informational)
-        continue-on-error: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+
+      - name: Smoke conformance (blocking)
         run: |
+          set -euo pipefail
           SMOKE_DIR=$(mktemp -d)
-          git clone --depth 1 https://github.com/skyphusion-labs/the-hollow-grid.git "$SMOKE_DIR" 2>/dev/null || true
+          git clone --depth 1 https://github.com/skyphusion-labs/the-hollow-grid.git "$SMOKE_DIR"
           SMOKE="$SMOKE_DIR/smoke.mjs"
-          if [ ! -f "$SMOKE" ]; then echo "SKIP: smoke suite not found"; exit 0; fi
+          test -f "$SMOKE"
           docker rm -f hgg-ci >/dev/null 2>&1 || true
-          docker run -d --name hgg-ci -p 18790:8790 "$IMAGE:latest"
-          for i in $(seq 1 20); do curl -sf localhost:18790/health >/dev/null 2>&1 && break; sleep 1; done
-          MUD_URL=ws://localhost:18790/ws timeout 90 node "$SMOKE" > smoke.txt 2>&1 || true
+          ADMIN_TOKEN="$(openssl rand -hex 16)"
+          export ADMIN_TOKEN
+          docker run -d --name hgg-ci -e ADMIN_TOKEN -p 18790:8790 "$IMAGE:latest"
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -sf localhost:18790/health >/dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          if [ "$ok" -ne 1 ]; then echo "FAIL: container did not become healthy" >&2; exit 1; fi
+          set +e
+          MUD_URL=ws://localhost:18790/ws SMOKE_SLOW=2 \
+            DUSTFALL_URL=ws://127.0.0.1:18788/ws \
+            timeout 900 node "$SMOKE" > smoke.txt 2>&1
+          smoke_rc=$?
+          set -e
           docker rm -f hgg-ci >/dev/null 2>&1 || true
           pass=$(grep -c '^ok' smoke.txt || true)
           fail=$(grep -c '^FAIL' smoke.txt || true)
-          echo "smoke conformance: ${pass} passed / ${fail} failed (informational; port in progress)"
+          skip=$(grep -c '^SKIP' smoke.txt || true)
+          echo "smoke conformance: ${pass} ok / ${fail} fail / ${skip} skip (rc=${smoke_rc})"
+          if [ "$pass" -eq 0 ] || [ "$smoke_rc" -ne 0 ] || [ "$fail" -ne 0 ]; then
+            tail -30 smoke.txt >&2
+            exit 1
+          fi
 
       - name: Upload smoke results
         if: always()
