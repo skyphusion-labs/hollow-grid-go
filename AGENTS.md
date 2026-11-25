@@ -10,7 +10,7 @@ Protocol authority is `the-hollow-grid/docs/protocol.md`. Do not invent protocol
 
 The world is playable standalone. It is also playable federated. Definition of done is upstream `smoke.mjs`. Score it against current the-hollow-grid head. A dated score is not the current gate. Read [README.md](README.md) and [docs/PLAN.md](docs/PLAN.md) for the last recorded score. Score again before you cite it.
 
-The public host stays offline. Run the world locally. You can also run the published image `ghcr.io/skyphusion-labs/hollow-grid-go`.
+The public world runs in a Cloudflare container. Open https://rustchoir.skyphusion.org/ or connect to `wss://rustchoir.skyphusion.org/ws`. You can also run the published image `ghcr.io/skyphusion-labs/hollow-grid-go`.
 
 ## Federation
 
@@ -62,7 +62,7 @@ CI runs `go vet ./...`, `go test -race ./...`, and `go build ./...`. See [.githu
 
 Upstream `smoke.mjs` is the definition-of-done scoreboard. Point it at a running server or the container. Assert on `@event`, not prose.
 
-The smoke step in `release.yml` is informational. A partial pass does not fail that build. Treat a green release job as an image build. Do not treat it as a smoke pass.
+CI and the release workflow both require upstream smoke to pass against a local server or image. Verify the public Cloudflare host separately.
 
 ## Architecture
 
@@ -113,7 +113,7 @@ Before a release pull request, look for a tag of the current version. A matching
 
 ## Release
 
-Tag-gated image publish. No host deploy.
+The release workflow publishes tagged images to GHCR. Cloudflare hosting uses `wrangler.jsonc` separately.
 
 A merge to `main` runs CI and builds the image. It does not push the image. Cut an annotated tag on `main` to publish.
 
