@@ -355,6 +355,20 @@ func TestCinderFrontMoralArc(t *testing.T) {
 	mustContain(t, "ash-sworn brand", readUntil(t, read2, "ash-sworn"), "ash-sworn", `"ashsworn":true`)
 }
 
+func TestWarReportsNegativeTide(t *testing.T) {
+	read, send, done := dial(t, newWorldServer(t))
+	defer done()
+
+	loginNewCharacter(t, read, send, "WarReader", "human")
+	send("north")
+	read()
+	send("join")
+	readUntil(t, read, `"faction":"front"`)
+	send("war")
+	reply := readUntil(t, read, "(tide ")
+	mustContain(t, "war tide", reply, "(tide -")
+}
+
 // TestWastesAndWaystation: the wastes are reachable (roof -> Ash Flats -> Scorch
 // Road with a raider -> Refugee Waystation), the waystation reads your standing,
 // and the medic tends you there.

@@ -12,12 +12,12 @@ import (
 
 var ambientLedgerKinds = []string{"ghost", "passage", "recall"}
 
-// RunFederation starts background hub heartbeats when connected to a remote Grid.
+// RunFederation polls the hub for gridcasts and presence.
+// A local hub still needs the poll, or a gridcast never reaches the other player.
 func (s *Server) RunFederation(ctx context.Context) {
-	if !s.grid.Remote() {
-		return
+	if s.grid.Remote() {
+		go s.registerWorld(ctx)
 	}
-	go s.registerWorld(ctx)
 	ticker := time.NewTicker(2 * time.Second)
 	go func() {
 		defer ticker.Stop()
@@ -69,13 +69,11 @@ func (s *Server) registerWorld(ctx context.Context) {
 }
 
 func (s *Server) contributeTide(delta int) {
-	go func() {
-		ctx, cancel := hubCtx()
-		defer cancel()
-		if _, err := s.grid.ShiftTide(ctx, delta); err != nil {
-			s.log.Debug("shiftTide failed", "delta", delta, "err", err)
-		}
-	}()
+	ctx, cancel := hubCtx()
+	defer cancel()
+	if _, err := s.grid.ShiftTide(ctx, delta); err != nil {
+		s.log.Debug("shiftTide failed", "delta", delta, "err", err)
+	}
 }
 
 func (s *Server) pollGridcasts(ctx context.Context) {

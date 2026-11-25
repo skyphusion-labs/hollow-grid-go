@@ -16,7 +16,7 @@ func (s *session) cmdWar() {
 		return
 	}
 	state := warState(tide)
-	s.line(fmt.Sprintf("Across the whole Grid, the war for the wastes: %s (tide %s%d)", state, tideSign(tide), absInt(tide)))
+	s.line(fmt.Sprintf("Across the whole Grid, the war for the wastes: %s (tide %+d)", state, tide))
 	if tide >= 40 {
 		s.line("  And you can see it in the world itself: the wastes are starting, here and there, to come back to life.")
 	} else if tide <= -40 {
@@ -38,20 +38,6 @@ func warState(tide int) string {
 	default:
 		return "the war hangs in perfect, brutal balance."
 	}
-}
-
-func tideSign(n int) string {
-	if n >= 0 {
-		return "+"
-	}
-	return ""
-}
-
-func absInt(n int) int {
-	if n < 0 {
-		return -n
-	}
-	return n
 }
 
 func (s *session) cmdGridcast(arg string) {

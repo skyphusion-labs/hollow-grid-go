@@ -9,6 +9,12 @@
 # local persistence (character sheets)
 /data/
 .env
+.wrangler/
+node_modules/
+.dev.vars
+.dev.vars
+.wrangler/
+node_modules/
 # editor/os
 .DS_Store
 *.swp

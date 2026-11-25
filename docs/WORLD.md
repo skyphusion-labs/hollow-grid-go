@@ -4,7 +4,7 @@
 speaks the same wire protocol and passes the same conformance suite as the
 reference world, but it is not a clone of hollow.skyphusion.org or Dustfall.
 
-The public host is retired. Run the world locally. See the README.
+Live at `wss://rustchoir.skyphusion.org/ws`. One Durable Object runs the existing container.
 
 ## The pitch
 
@@ -28,7 +28,7 @@ between the Front's coin and the refugees in line.
 | Signature zone | Canonical map only | **Grid Gate + Memorial Static** grafted onto the canonical graph |
 | `/map.svg` | TS-generated from rooms.ts | Rust-toned SVG with the bonus tract marked |
 | Default listen flavor | Generic dead-network voices | Same transmission pool; prose framing leans **archivist** |
-| Where it runs | Cloudflare Workers | Go container you run (the public host is retired) |
+| Where it runs | Cloudflare Workers | Cloudflare container at `wss://rustchoir.skyphusion.org/ws` |
 | Engine | TypeScript World DO | **Go** (`hollow-grid-go`) |
 
 Mechanically the races, Cinder Front arc, holding-pit rescue, and `@event`
