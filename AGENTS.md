@@ -115,6 +115,11 @@ Before a release pull request, look for a tag of the current version. A matching
 
 The release workflow publishes tagged images to GHCR. Cloudflare hosting uses `wrangler.jsonc` separately.
 
+For a Worker-only change on the existing deployment, use Wrangler 4.168.0 or
+newer with `wrangler deploy --containers-rollout=none`. This reuses the deployed
+container image metadata. Before changing the container image, plan a data
+migration. A filesystem snapshot restores the image it was taken from.
+
 A merge to `main` runs CI and builds the image. It does not push the image. Cut an annotated tag on `main` to publish.
 
 ```bash
