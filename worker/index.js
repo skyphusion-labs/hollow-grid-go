@@ -83,9 +83,16 @@ export class RustChoirWorld extends DurableObject {
 
   async startAndWait(envVars) {
     const container = this.ctx.container;
+    const image = container.images.base;
+    const booted = await this.ctx.storage.get("bootedImage");
+    if (container.running && booted !== image) {
+      await container.destroy();
+      for (let i = 0; i < 25 && container.running; i++) {
+        await scheduler.wait(200);
+      }
+    }
     if (!container.running) {
       const saved = await this.ctx.storage.get("disk");
-      const image = container.images.base;
       if (saved && saved.image === image) {
         container.start({
           containerSnapshot: saved.snapshot,
@@ -100,6 +107,7 @@ export class RustChoirWorld extends DurableObject {
           env: envVars,
         });
       }
+      await this.ctx.storage.put("bootedImage", image);
     }
     await container.setInactivityTimeout(IDLE_MS);
     await this.armSnapshot();
