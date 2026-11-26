@@ -153,9 +153,28 @@ func TestResumePersistsTheCharacter(t *testing.T) {
 	loginNewCharacter(t, read, send, "Mara", "revenant")
 	done()
 
-	read2, send2, done2 := dial(t, ts)
-	defer done2()
-	resumed := loginResume(t, read2, send2, "Mara")
+	// The closed socket may still hold the name until its session returns.
+	// A second dial in that window is refused. Wait until the name is free.
+	var resumed string
+	var done2 func()
+	for i := 0; i < 25; i++ {
+		read2, send2, close2 := dial(t, ts)
+		done2 = close2
+		loginNameAndPassphrase(t, read2, send2, "Mara")
+		got := read2()
+		if strings.Contains(got, "already awake") {
+			close2()
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		mustContain(t, "passphrase", got, "secret phrase")
+		send2(testPassphrase)
+		resumed = read2()
+		break
+	}
+	if done2 != nil {
+		defer done2()
+	}
 	mustContain(t, "resume", resumed, "Welcome back", "Type 'help'", `"race":"revenant"`)
 	if strings.Contains(resumed, "choose what you are") {
 		t.Fatalf("resume should skip the race menu: %q", resumed)
